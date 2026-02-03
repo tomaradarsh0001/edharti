@@ -545,7 +545,8 @@ class ApplicationController extends Controller
             $inFavourCon = [];
             $transferDate = '';
             if ($propertyDetails) {
-                $data['status'] = $propertyDetails['status'];
+                // $data['status'] = $propertyDetails['status']; // comment on 02/Feb/2026 for find status of splitted property
+                $data['status'] = $childProperty['property_status'] ?? $propertyDetails['status'];
                 if ($data['status'] == '952') {
                     //if free hold
                     // dd($propertyDetails);
@@ -644,7 +645,13 @@ class ApplicationController extends Controller
         if ($draftApplicationPropertyId == 'false' && $updateId != 0) {
             $response = ['status' => false, 'message' => 'Data should be deleted', 'data' => 'deleteYes'];
         } else {
-            $propertyDetails = PropertyMaster::where('old_propert_id', $oldPropertyId)->first();
+            $splitedProperty = SplitedPropertyDetail::where('old_property_id', $oldPropertyId)->first();
+            if($splitedProperty){
+                $propertyDetails = $splitedProperty;
+            } else {
+
+                $propertyDetails = PropertyMaster::where('old_propert_id', $oldPropertyId)->first();
+            }
             $data = [];
             $data['propertyDetails'] = Self::getPropertyCommonDetails($oldPropertyId);
             $data['items'] = [];
@@ -701,7 +708,8 @@ class ApplicationController extends Controller
 
         $propertyLeaseDetail = $propertyMaster->propertyLeaseDetail;
         $data['leaseType'] = getServiceNameById($propertyLeaseDetail->type_of_lease);
-        $data['status'] = $propertyMaster->statusName; // added by Nitin because we need to show property status in application view page
+        // $data['status'] = $propertyMaster->statusName; // added by Nitin because we need to show property status in application view page
+        $data['status'] = $splitedProperty?->property_status ?? $propertyMaster->statusName; // added by Nitin because we need to show property status in application view page
         $data['leaseExectionDate'] = $propertyLeaseDetail->doe;
         // $data['area'] = $propertyLeaseDetail->plot_area_in_sqm;
         // $data['presentlyKnownAs'] = $propertyLeaseDetail->presently_known_as;
@@ -714,6 +722,7 @@ class ApplicationController extends Controller
         $propertyTransferDetaails = $propertyMaster->propertyTransferredLesseeDetails;
         $originalLessee = $propertyTransferDetaails->where('process_of_transfer', 'Original')->first();
         $data['inFavourOf'] = $originalLessee->lessee_name;
+        // dd($data);
         return $data;
     }
 
@@ -2949,7 +2958,7 @@ public function applicationsAllDetails()
             }
             if ($editFlag == true) {
                 $objectedAction = base64_encode('objectApplication');
-                $action .= '<a href="' . url('applications/edit/' . $application->id) . '?type=' . $model . '&action=' . $objectedAction . '"><button type="button" class="btn btn-primary px-3">Edit</button></a>';
+                $action .= '<a href="' . url('edharti/applications/edit/' . $application->id) . '?type=' . $model . '&action=' . $objectedAction . '"><button type="button" class="btn btn-primary px-3">Edit</button></a>';
             }
             $action .=  '</div>';
             $nestedData['action'] = $action;

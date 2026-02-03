@@ -66,11 +66,12 @@
             <thead>
                 <tr>
                     <th>S.No</th>
-                    <th>Request ID</th>
+                    <th>Request Date</th>
                     <th>Property ID</th>
                     <th>Block/Plot/Flat</th>
                     <th>Colony</th>
                     <th>File No</th>
+                    <th>Record File Location</th>
                     <th>Property Status</th>
                     <th>Reason</th>
                     <th>Request Status</th>
@@ -100,11 +101,12 @@
                 { data: null, render: function (data, type, row, meta) {
                     return meta.row + meta.settings._iDisplayStart + 1;
                 }},
-                { data: 'unique_id' },
+                { data: 'request_date' },
                 { data: 'old_property_id' },
                 { data: 'plot_or_flat' },
                 { data: 'colony_name' },
                 { data: 'file_no' },
+                { data: 'record_file_location' },
                 { data: 'property_status' },
                 { data: 'reason' },
                 {
@@ -172,9 +174,37 @@
 
 
             ],
-            order: [[10, 'desc']],
+            columnDefs: [
+                    { targets: '_all', orderable: false },
+                    { targets: [0, 1, 10], orderable: true } // only these show sort icons
+                ],
+            order: [[1, 'desc']],
             scrollX: true,
-            buttons: ['csv', 'excel'],
+            buttons: [
+                        {
+                            text: 'CSV',
+                            action: function (e, dt, node, config) {
+                                const params = dt.ajax.params(); // DataTables current filters/search/order
+                                delete params.start;
+                                delete params.length;
+
+                                const qs = $.param(params);
+                                window.location = "{{ route('scanned.request.export.csv') }}" + (qs ? ('?' + qs) : '');
+                            }
+                        },
+                        {
+                            text: 'Excel',
+                            action: function (e, dt, node, config) {
+                                const params = dt.ajax.params();
+                                delete params.start;
+                                delete params.length;
+
+                                const qs = $.param(params);
+                                window.location = "{{ route('scanned.request.export.excel') }}" + (qs ? ('?' + qs) : '');
+                            }
+                        }
+                    ],
+
             dom: '<"top"Blf>rt<"bottom"ip><"clear">'
         });
     });

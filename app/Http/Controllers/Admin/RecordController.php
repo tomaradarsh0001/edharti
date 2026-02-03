@@ -31,16 +31,19 @@ class RecordController extends Controller
         $sections = getLoggedInUserSections();
        
 
-        $data = RecordRoomFile::select(
+        $data =  RecordRoomFile::query()
+        ->leftJoin('old_colonies', 'old_colonies.code', '=', 'record_room_files.colony_code')
+        ->select(
             'record_room_files.id',
             'record_room_files.record_id',
             'record_room_files.colony_code',
+            'old_colonies.name as colony_name',   
             'record_room_files.colony_id',
             'record_room_files.block',
             'record_room_files.plot',
             'record_room_files.file_location',
             'record_room_files.section_code',
-            'record_room_files.transaction_section_code',
+            'record_room_files.transaction_section_code'
         );
         $sectionCodes = Section::whereIn('id', $sections)->pluck('section_code')->toArray();
          if($sectionCodes[0] != "REC"){
@@ -58,6 +61,10 @@ class RecordController extends Controller
         }
 
         return DataTables::of($data)
+            ->editColumn('colony_code', function ($row) {
+                    return $row->colony_name ?? $row->colony_code;
+                })
+                
             ->addColumn('action', function ($row) {
                 // dd($row->id);
 
@@ -155,7 +162,11 @@ class RecordController extends Controller
 
         $sections = getLoggedInUserSections();
 
-        $data = FileRequest::select(
+        $data = FileRequest::query()
+            
+            ->leftJoin('record_room_files', 'file_requests.record_room_file_id', '=', 'record_room_files.id')
+            ->leftJoin('old_colonies', 'old_colonies.code', '=', 'record_room_files.colony_code')
+            ->select(
             'file_requests.id',
             'file_requests.status',
             'file_requests.record_room_file_id',
@@ -166,13 +177,15 @@ class RecordController extends Controller
             'file_requests.created_by',
             'file_requests.requisition_file',
             'file_requests.returned_file_to_record',
-            'record_room_files.colony_code',
+            'old_colonies.name as colony_name', 
             'record_room_files.block',
             'record_room_files.plot',
             'record_room_files.file_location',
             'record_room_files.record_id',
-        )
-        ->leftJoin('record_room_files', 'file_requests.record_room_file_id', '=', 'record_room_files.id');
+            )
+            
+        
+        ;
          $sectionCodes = Section::whereIn('id', $sections)->pluck('section_code')->toArray();
          if($sectionCodes[0] != "REC"){
             $data->whereIn('record_room_files.section_code', $sectionCodes);
@@ -193,6 +206,9 @@ class RecordController extends Controller
         // onclick="handleViewApplication(\'' . $application->application_no . '\', \'' . $model . '\', ' . $application->id . ')"
 
         return DataTables::of($data)
+        ->editColumn('colony_code', function ($row) {
+            return $row->colony_name ?? $row->colony_code;
+        })
         ->addColumn('fileUpload', function ($row) {
                 $html = '';
 

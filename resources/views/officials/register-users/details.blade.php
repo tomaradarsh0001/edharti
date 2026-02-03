@@ -1815,6 +1815,13 @@
                     @else
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     @endif --}}
+                    @if(!empty($data['oldPropertyId']) && !empty($scannedFiles['files']) && count($scannedFiles['files']) > 0)
+                        <a href="{{ route('property.scanning.downloadAll', $data['oldPropertyId']) }}"
+                        class="btn btn-primary">
+                        Download All (ZIP)
+                        </a>
+
+                    @endif
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>

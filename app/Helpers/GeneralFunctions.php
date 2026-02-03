@@ -54,6 +54,7 @@ use App\Models\NocApplication;
 use App\Models\PropertyScannedRequest;
 use App\Models\SplitedPropertyDetail;
 use App\Models\PropertyScannedFile;
+use ZipArchive;
 
 class GeneralFunctions
 {
@@ -119,17 +120,17 @@ class GeneralFunctions
     //Introduce flatid - Lalit on 04/Nov/2024
     public static function isPropertyFree($propertyId, $flatId = null)
     {
-        // $property = PropertyMaster::where('old_propert_id', $propertyId)->first();
         $splitedProperty = SplitedPropertyDetail::where('old_property_id', $propertyId)->first();
-        if (!empty($splitedProperty)) {
-            $propertyId = $splitedProperty->property_master_id;
-            $property = PropertyMaster::find($propertyId);
-        } else {
+        if (empty($splitedProperty)) {
             $property = PropertyMaster::where('old_propert_id', $propertyId)->first();
+            $oldPropertyId = $property->old_propert_id;
+        } else {
+            $property = SplitedPropertyDetail::where('old_property_id', $propertyId)->first();
+            $oldPropertyId = $property->old_property_id;
         }
-        if ($property) {
+        if ($property || $splitedProperty) {
             if (!empty($propertyId) && !empty($flatId)) {
-                $ispropertyLinked = UserProperty::where('old_property_id', $property->old_propert_id)
+                $ispropertyLinked = UserProperty::where('old_property_id', $oldPropertyId)
                     ->when(!empty($splitedProperty), function ($query) use ($splitedProperty) {
                         return $query->where('splitted_property_id', $splitedProperty->id);
                     })
@@ -1187,5 +1188,85 @@ class GeneralFunctions
             'files' => $scannedFiles
         ];
 
+    }
+
+    public static function downloadZipFromScannedFiles($files, string $zipBaseName, string $disk = 'public')
+    {
+        $files = collect($files);
+
+        if ($files->isEmpty()) {
+            return back()->withErrors(['documents' => 'No files found to download.']);
+        }
+
+        $zipFileName = $zipBaseName . '.zip';
+        $zipPath = storage_path("app/tmp/{$zipFileName}");
+
+        // Ensure tmp directory exists
+        if (!is_dir(dirname($zipPath))) {
+            mkdir(dirname($zipPath), 0755, true);
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            return back()->withErrors(['documents' => 'Unable to create ZIP file.']);
+        }
+
+        $usedNames = [];
+        $added = 0;
+
+        foreach ($files as $f) {
+            $docPath = data_get($f, 'document_path');
+
+            if (!$docPath || !Storage::disk($disk)->exists($docPath)) {
+                continue;
+            }
+
+            $ext = pathinfo($docPath, PATHINFO_EXTENSION) ?: 'pdf';
+
+            $base = data_get($f, 'old_property_file_name')
+                ?: pathinfo($docPath, PATHINFO_FILENAME)
+                ?: 'document';
+
+            // dd($base);
+
+            $downloadName = "{$base}.{$ext}";
+
+            // Avoid duplicate names inside ZIP
+            $key = strtolower($downloadName);
+            if (isset($usedNames[$key])) {
+                $usedNames[$key]++;
+                $downloadName = "{$base}_{$usedNames[$key]}.{$ext}";
+            } else {
+                $usedNames[$key] = 1;
+            }
+
+            $absolutePath = Storage::disk($disk)->path($docPath);
+            $zip->addFile($absolutePath, $downloadName);
+            $added++;
+        }
+
+        $zip->close();
+
+        if ($added === 0) {
+            @unlink($zipPath);
+            return back()->withErrors(['documents' => 'No valid files were available to add to the ZIP.']);
+        }
+
+        return response()
+            ->download($zipPath, $zipFileName)
+            ->deleteFileAfterSend(true);
+    }
+
+    public static function downloadAllScannedFilesZipByOldPropertyId(string $oldPropertyId)
+    {
+        $files = PropertyScannedFile::where('old_property_id', $oldPropertyId)
+            ->orderBy('id', 'asc')
+            ->get(['old_property_file_name', 'document_path']);
+
+        return self::downloadZipFromScannedFiles(
+            $files,
+            "{$oldPropertyId}_scanned_files",
+            'public'
+        );
     }
 }

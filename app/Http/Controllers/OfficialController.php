@@ -3339,4 +3339,12 @@ class OfficialController extends Controller
             ]);
         });
     }
+
+    
+    public function downloadAll($propertyId)
+    {
+        return GeneralFunctions::downloadAllScannedFilesZipByOldPropertyId($propertyId);
+    }
+
+
 }

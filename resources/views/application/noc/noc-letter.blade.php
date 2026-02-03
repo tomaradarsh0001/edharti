@@ -203,7 +203,7 @@
                  $propertyStatus = "freehold";
              }
             @endphp
-            Certified that property No. {{$noticeData['plotNo']}} , block-{{$noticeData['blockNo']}} admeasuring {{$noticeData['plotArea']}} (in Sqm) situated at {{$noticeData['colonyName']}},
+            Certified that property No. {{$noticeData['plotNo']}}, block-{{$noticeData['blockNo']}} admeasuring {{$noticeData['plotArea']}} (in Sqm) situated at {{$noticeData['colonyName']}},
             Delhi is a {{$propertyStatus}} property and as per L&DO record standing in the name of {{$noticeData['lesseeNames']}}.
         </p>
         <p>

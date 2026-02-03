@@ -4181,7 +4181,7 @@ class ApplicationController extends Controller
                 }
 
 
-
+                // dd($applicationLatestMov);
 
 
                 // for show hide the send appointment link button for CDV  SOURAV CHAUHAN
@@ -5399,6 +5399,16 @@ class ApplicationController extends Controller
                         return response()->json($finalized);
                     }
 
+                    if ($application->service_type == getServiceType("SUB_MUT")) {
+                        $mutationApplication = $model::where('id', $application->model_id)->first();
+                        $finalized = $this->finalizeMutationApplication($mutationApplication);
+                        if (!$finalized['status']) {
+                            return response()->json($finalized);
+                        }
+                        return response()->json($finalized);
+                    }
+
+
 
                     $getApplicationDetails = $model::where('id', $application->model_id)->first();
                     if ($application->model_name == 'MutationApplication') {
@@ -5409,6 +5419,8 @@ class ApplicationController extends Controller
                         $mailServiceType = 'Deed Of Apartment';
                     } else if ($application->model_name == 'LandUseChangeApplication') {
                         $mailServiceType = 'Land Use Change';
+                    } else if ($application->model_name == 'NocApplication') {
+                        $mailServiceType = 'No Objection Certificate';
                     } else {
                         $mailServiceType = '';
                     }
@@ -5430,7 +5442,8 @@ class ApplicationController extends Controller
 
                     $action = "APP_APR";
                     $checkEmailTemplateExists = checkTemplateExists('email', $action);
-                    $signedLetter = storage_path('app/public/' . $application->Signed_letter);
+                    $signedLetter = 'storage/' . $application->Signed_letter;
+                    // dd($signedLetter);
                     if (!empty($checkEmailTemplateExists)) {
 
                          // --- EMAIL ---
@@ -5452,6 +5465,8 @@ class ApplicationController extends Controller
                             ]);
                         }
                     }
+
+                    // dd('email sent');
 
                     $mobileNo = $userDetails->mobile_no;
                     $checkSmsTemplateExists = checkTemplateExists('sms', $action);
@@ -5892,7 +5907,35 @@ class ApplicationController extends Controller
         $lesseeNames = [];
         $transferDate = [];
 
-        $propertyTransferredLesseeDetail = PropertyTransferredLesseeDetail::where('property_master_id', $applicationDetails->property_master_id)->where('process_of_transfer', 'Conversion')->get();
+        // $propertyTransferredLesseeDetail = PropertyTransferredLesseeDetail::where('property_master_id', $applicationDetails->property_master_id)->where('process_of_transfer', 'Conversion')->get();
+        $hasChildRecords = PropertyTransferredLesseeDetail::where(
+                    'property_master_id', $propertyDetails->id
+                )
+                ->where('splited_property_detail_id', $childId)
+                ->exists();
+        $propertyTransferredLesseeDetail = PropertyTransferredLesseeDetail::where(
+                    'property_master_id', $propertyDetails->id
+                )
+                ->where(function ($query) use ($childId, $hasChildRecords) {
+                    if ($childId && $hasChildRecords) {
+                        $query->where('splited_property_detail_id', $childId);
+                    } else {
+                        $query->whereNull('splited_property_detail_id');
+                    }
+                })
+                ->where('batch_transfer_id', function ($q) use ($propertyDetails, $childId, $hasChildRecords) {
+                    $q->selectRaw('MAX(batch_transfer_id)')
+                        ->from('property_transferred_lessee_details')
+                        ->where('property_master_id', $propertyDetails->id)
+                        ->where(function ($sub) use ($childId, $hasChildRecords) {
+                            if ($childId && $hasChildRecords) {
+                                $sub->where('splited_property_detail_id', $childId);
+                            } else {
+                                $sub->whereNull('splited_property_detail_id');
+                            }
+                        });
+                })
+                ->get();
         // dd($propertyTransferredLesseeDetail->toSql(), $propertyTransferredLesseeDetail->getBindings(), $applicationDetails);
         $lesseeNames = $transferDate = array();
         foreach ($propertyTransferredLesseeDetail as $lesseeDetail) {
@@ -6358,7 +6401,7 @@ class ApplicationController extends Controller
         if ($isSplittedPropertyObj) {
             $propertyDetails = PropertyMaster::find($isSplittedPropertyObj->property_master_id);
         } else {
-            $propertyDetails = PropertyMaster::where('old_property_id', $oldPropertyId)->first();
+            $propertyDetails = PropertyMaster::where('old_propert_id', $oldPropertyId)->first();
         }
         $colonyId = $propertyDetails['new_colony_name'];
         $colony = OldColony::find($colonyId);
@@ -8448,6 +8491,164 @@ class ApplicationController extends Controller
         }
     }
 
+    public function finalizeMutationApplication($mutationApplication)
+    {
+        $user = User::find($mutationApplication['created_by']);
+        $propertyMasterId = $mutationApplication->property_master_id;
+        $splittedPropertyId = $mutationApplication->splitted_id;
+        $oldPropertyId = $mutationApplication->old_property_id;
+
+        if ($user && $propertyMasterId) {
+            // Determine if we're working with Property Master or Splitted Property
+            $isSplittedProperty = !empty($splittedPropertyId);
+            // Determine which ID to use for fetching max batch_transfer_id
+            if ($isSplittedProperty) {
+                $propertyDetailsFinal = SplitedPropertyDetail::where('id', $splittedPropertyId)->first();
+                $presentlyKnownAs = $propertyDetailsFinal->presently_known_as;
+                $area = $propertyDetailsFinal->current_area;
+                $unit = $propertyDetailsFinal->unit;
+                $areaInSqm = $propertyDetailsFinal->area_in_sqm;
+                $propertyStatus = $propertyDetailsFinal->property_status;
+                $isPrevBatchId = PropertyTransferredLesseeDetail::where('splited_property_detail_id', $splittedPropertyId)->max('batch_transfer_id');
+            } else {
+                $propertyDetailsFinal = PropertyMaster::where('id', $propertyMasterId)->first();
+                $leaseDetails = PropertyLeaseDetail::where('property_master_id', $propertyMasterId)->first();
+                $presentlyKnownAs = $leaseDetails->presently_known_as;
+                $area = $leaseDetails->plot_area;
+                $unit = $leaseDetails->unit;
+                $areaInSqm = $leaseDetails->plot_area_in_sqm;
+                $propertyStatus = $propertyDetailsFinal->status;
+                $isPrevBatchId = PropertyTransferredLesseeDetail::where('property_master_id', $propertyMasterId)->max('batch_transfer_id');
+            }
+
+
+
+            if ($isPrevBatchId) {
+                $batch_transfer_id = $isPrevBatchId + 1;
+                $previous_batch_transfer_id = $isPrevBatchId;
+            } else {
+                $batch_transfer_id = 1;
+                $previous_batch_transfer_id = null;
+            }
+
+            // Insert Applicant Details in PropertyTransferredLesseeDetail Table
+            $applicantShare = ApplicantShare::where('application_no', $mutationApplication->application_no)->value('share');
+            $transferData = [
+                'property_master_id' => $propertyMasterId,
+                'old_property_id' => $oldPropertyId,
+                'lessee_name' => $user->name,
+                'lessee_age' => $user->applicantUserDetails->age ?? null,
+                'property_share' => $applicantShare ?? null,
+                'lessee_pan_no' => $user->applicantUserDetails->pan_card ?? null,
+                'lessee_aadhar_no' => $user->applicantUserDetails->aadhar_card ?? null,
+                'process_of_transfer' => 'Mutation',
+                'transferDate' => date('Y-m-d'),
+                'batch_transfer_id' => $batch_transfer_id,
+                'previous_batch_transfer_id' => $previous_batch_transfer_id,
+                'created_by' => Auth::id()
+            ];
+
+            // Add splited_property_detail_id if it exists
+            if ($isSplittedProperty) {
+                $transferData['splited_property_detail_id'] = $splittedPropertyId;
+            }
+
+            PropertyTransferredLesseeDetail::create($transferData);
+
+            // Insert CoApplicant Details in PropertyTransferredLesseeDetail Table
+            $coApplicants = CoApplicant::where('model_name', 'MutationApplication')
+                ->where('model_id', $mutationApplication->id)
+                ->get();
+
+            if ($coApplicants->isNotEmpty()) {
+                foreach ($coApplicants as $coApplicant) {
+                    $coTransferData = [
+                        'property_master_id' => $propertyMasterId,
+                        'old_property_id' => $oldPropertyId,
+                        'lessee_name' => $coApplicant->co_applicant_name,
+                        'lessee_age' => Carbon::parse($coApplicant->co_applicant_age)->diffInYears(Carbon::now()),
+                        'property_share' => $coApplicant->share,
+                        'lessee_pan_no' => $coApplicant->co_applicant_pan,
+                        'lessee_aadhar_no' => $coApplicant->co_applicant_aadhar,
+                        'process_of_transfer' => 'Mutation',
+                        'transferDate' => date('Y-m-d'),
+                        'batch_transfer_id' => $batch_transfer_id,
+                        'previous_batch_transfer_id' => $previous_batch_transfer_id,
+                        'created_by' => Auth::id()
+                    ];
+
+                    // Add splited_property_detail_id if it exists
+                    if ($isSplittedProperty) {
+                        $coTransferData['splited_property_detail_id'] = $splittedPropertyId;
+                    }
+
+                    PropertyTransferredLesseeDetail::create($coTransferData);
+                }
+            }
+
+            // Fetch Details from Property Transferred Lessee Detail Table for Co-Applicant 
+            // and insert in Current Lessee Details Table
+            if ($isSplittedProperty) {
+                $propertyTransferDetails = PropertyTransferredLesseeDetail::where('splited_property_detail_id', $splittedPropertyId)
+                    ->where('batch_transfer_id', $batch_transfer_id)
+                    ->get();
+            } else {
+                $propertyTransferDetails = PropertyTransferredLesseeDetail::where('property_master_id', $propertyMasterId)
+                    ->where('batch_transfer_id', $batch_transfer_id)
+                    ->get();
+            }
+
+            $leaseNames = [];
+
+            if ($propertyTransferDetails->isNotEmpty()) {
+                foreach ($propertyTransferDetails as $propertyTransferDetail) {
+                    $leaseNames[] = $propertyTransferDetail->lessee_name;
+                }
+                $leaseNameString = implode(', ', $leaseNames);
+            } else {
+                $leaseNameString = '';
+            }
+
+            // Update Current Lessee Details Table
+            if ($isSplittedProperty) {
+                // Check if record exists for splitted property
+                $existingRecord = CurrentLesseeDetail::where('splited_property_detail_id', $splittedPropertyId)->first();
+
+                if ($existingRecord) {
+                    $existingRecord->update([
+                        'lessees_name' => $leaseNameString,
+                        'updated_by' => Auth::id()
+                    ]);
+                } else {
+                    // Create new record for splitted property
+                    CurrentLesseeDetail::create([
+                        'property_master_id' => $propertyMasterId,
+                        'splited_property_detail_id' => $splittedPropertyId,
+                        'old_property_id' => $oldPropertyId,
+                        'property_status' => $propertyStatus,
+                        'lessees_name' => $leaseNameString,
+                        'property_known_as' => $presentlyKnownAs,
+                        'area' => $area,
+                        'unit' => $unit,
+                        'area_in_sqm' => $areaInSqm,
+                        'created_by' => Auth::id(),
+                        'updated_by' => Auth::id()
+                    ]);
+                }
+            } else {
+                // Update for property master
+                CurrentLesseeDetail::where('property_master_id', $propertyMasterId)->update([
+                    'lessees_name' => $leaseNameString,
+                    'updated_by' => Auth::id()
+                ]);
+            }
+
+            return ['status' => true, 'message' => 'Application finalized successfully'];
+        } else {
+            return ['status' => false, 'message' => 'Property Id not found'];
+        }
+    }
+
 
     // Get application object latest remark - SOURAV CHAUHAN (30 Jan 2024)
     public function applicationsObjectRemark(Request $request)
@@ -8478,10 +8679,17 @@ class ApplicationController extends Controller
         $getStatusId = '';
         $applicationType = '';
         $getApplicationTypeId = '';
+        $items = getApplicationStatusList(true, false);
         if ($request->query('filterByApplication')) {
             /** code modified by Nitin to add desposed satatus in the list */
             $appTypeItems = getApplicationTypeList();
             $getApplicationTypeId = $appTypeItems->where('item_code', trim(Crypt::decrypt($request->query('filterByApplication'))))->value('id'); // trim added by Nitin to remove extra space and lines from descrypted string - on 04-2024
+        }
+        // dd(trim(Crypt::decrypt($request->query('status'))));
+        if ($request->query('status')) {
+            // dd($items);
+             $items = getApplicationStatusList(true, false);
+            $getStatusId = $items->where('item_code', trim(Crypt::decrypt($request->query('status'))))->value('id'); // trim added by Nitin to remove extra space and lines from descrypted string - on 04-2024
         }
         if ($request->query('applicationType')) {
             $applicationType = $request->query('applicationType');
@@ -8490,7 +8698,6 @@ class ApplicationController extends Controller
             $demandType = $request->query('demandType');
         }
         $user = Auth::user();
-        $items = getApplicationStatusList(true, false);
         $appTypeItems = getApplicationTypeList();
         return view('admin.applications.disposed', compact('items', 'getStatusId', 'user', 'applicationType', 'appTypeItems', 'getApplicationTypeId', 'demandType'));
     }
@@ -9658,6 +9865,9 @@ class ApplicationController extends Controller
         $earliestApplications = Application::whereIn('application_no', $latestAssigned)->orderBy('created_at')->take($fifoLimit)->pluck('application_no')->toArray();
         // dd($earliestApplications);
         $canView = in_array($applicationNo, $earliestApplications);
+        if ($user->roles[0]->name == 'applicant') {
+            $canView  = true;
+        }
         return $canView;
     }
     

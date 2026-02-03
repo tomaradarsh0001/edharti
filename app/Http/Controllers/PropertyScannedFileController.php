@@ -14,8 +14,7 @@ use App\Models\PropertyScannedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use ZipArchive;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Helpers\GeneralFunctions;
 class PropertyScannedFileController extends Controller
 {
     // public function create()
@@ -447,47 +446,32 @@ public function scanningReport()
     return view('property_scanning.scanning-report', compact('totalCount', 'sectionCounts'));
 }
 
-public function downloadAll($propertyId)
-{
-    $files = PropertyScannedFile::where('old_property_id', $propertyId)
-        ->orderBy('id', 'asc')
-        ->get(['old_property_file_name', 'document_path']);
-
-    if ($files->isEmpty()) {
-        return back()->withErrors(['documents' => 'No files found for this property to download.']);
+    public function downloadAll($propertyId)
+    {
+        return GeneralFunctions::downloadAllScannedFilesZipByOldPropertyId($propertyId);
     }
 
-    $zipFileName = "property_{$propertyId}_scanned_files.zip";
-    $zipPath = storage_path("app/tmp/{$zipFileName}");
+    public function downloadZipByMasterSplit($propertyMasterId, $splitId = null)
+    {
+        $query = PropertyScannedFile::where('property_master_id', $propertyMasterId)
+            ->when($splitId, function ($q) use ($splitId) {
+                return $q->where('splited_property_detail_id', $splitId);
+            }, function ($q) {
+                return $q->whereNull('splited_property_detail_id');
+            })
+            ->orderBy('id', 'asc');
 
-    // Ensure tmp dir exists
-    if (!is_dir(dirname($zipPath))) {
-        mkdir(dirname($zipPath), 0755, true);
+        // Fetch files
+        $files = $query->get(['document_name', 'document_path']);
+
+        // 🔹 Get old_property_id safely (from first row)
+        $oldPropertyId = $query->value('old_property_id') ?? $propertyMasterId;
+
+        return GeneralFunctions::downloadZipFromScannedFiles(
+            $files,
+            "{$oldPropertyId}_scanned_files"
+        );
     }
-
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        return back()->withErrors(['documents' => 'Unable to create ZIP file.']);
-    }
-
-    foreach ($files as $f) {
-        // stored on public disk in your code
-        if (!Storage::disk('public')->exists($f->document_path)) {
-            continue;
-        }
-
-        $ext = pathinfo($f->document_path, PATHINFO_EXTENSION) ?: 'pdf';
-        $downloadName = ($f->old_property_file_name ?: 'document') . '.' . $ext;
-
-        $absolutePath = Storage::disk('public')->path($f->document_path);
-        $zip->addFile($absolutePath, $downloadName);
-    }
-
-    $zip->close();
-
-    // Stream ZIP and delete after send
-    return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
-}
 
 
 }

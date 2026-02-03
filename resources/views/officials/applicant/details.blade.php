@@ -876,6 +876,13 @@
                     </ul> --}}
                 </div>
                 <div class="modal-footer justify-content-end">
+                    @if(!empty($data['oldPropertyId']) && !empty($scannedFiles['files']) && count($scannedFiles['files']) > 0)
+                        <a href="{{ route('property.scanning.downloadAll', $data['oldPropertyId']) }}"
+                        class="btn btn-primary">
+                        Download All (ZIP)
+                        </a>
+
+                    @endif
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
                         onclick="checkScannedFilesRegistration()">Close</button>
                 </div>

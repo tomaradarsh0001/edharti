@@ -669,9 +669,16 @@ Route::get('vacant/land/{id}/edit', [PropertyOutSideController::class, 'edit'])-
     ->name('property.scanning.returnToRecord');
     Route::post('/property-scanning/delete', [PropertyScannedRequestController::class, 'deleteRequest'])
     ->middleware('role:super-admin') ->name('property.scanning.deleteRequest');
-        Route::get('/property-scanning/{propertyId}/download-all', [PropertyScannedFileController::class, 'downloadAll'])
-        ->name('property.scanning.downloadAll');
+    Route::get('/property-scanning/{propertyId}/download-all', [PropertyScannedFileController::class, 'downloadAll'])
+    ->name('property.scanning.downloadAll');
+    Route::get('/property-scanning/requests/export/csv', [PropertyScannedRequestController::class, 'exportCsv'])
+    ->name('scanned.request.export.csv');
 
+    Route::get('/property-scanning/requests/export/excel', [PropertyScannedRequestController::class, 'exportExcel'])
+        ->name('scanned.request.export.excel');
+
+    Route::get('/property-scanning/{pmId}/{splitId?}/download-zip', [PropertyScannedFileController::class, 'downloadZipByMasterSplit'])
+    ->name('property.scanning.downloadZipByMasterSplit');
 	
 	Route::group(['middleware' => ['can:calculate.landUseChange']], function () {
         Route::get('land-use-change/calculate-charges', [LandUseChangeCalculationController::class, 'calculateLandUseChangeCharges'])->name('calculateLandUseChangeCharges');

@@ -218,12 +218,15 @@
                 $("#selectedOldPropertyId").val(data.old_property_id ?? data.old_propert_id);
                 // -------------------------------------------------
                 // added by swati on 08012026 : set current section display
+                // added by swati on 28012026 : set current section display
                 let currentSectionText = "";
-                if (data.section_name || data.section_code) {
+
+                if (meta && meta.master_section_code) {
                     currentSectionText =
-                        (data.section_name ?? "") +
-                        (data.section_code ? " (" + data.section_code + ")" : "");
+                        (meta.master_section_name ?? "") +
+                        " (" + meta.master_section_code + ")";
                 }
+
                 $("#current_section").val(currentSectionText);
                 // added by swati on 08012026 : set current section display
                 //

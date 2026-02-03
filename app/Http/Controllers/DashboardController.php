@@ -1310,7 +1310,7 @@ private function applicantData()
                         ->where('latest_statuses.row_num', '=', 1); // Ensures only the latest record
                 }
             )
-            ->whereIn('noc.section_id', $sections) // Verify $sections is an array
+            // ->whereIn('noc.section_id', $sections) // Verify $sections is an array (it is commented for subregistrar as he has no sectioned assigned) // 30 Jan 2026 - SOURAV CHAUHAN
             ->select(
                 'noc.updated_at',
                 'noc.application_no',
@@ -1363,7 +1363,7 @@ private function applicantData()
 
         $clonedQuery1 = (clone $query1);
         // Combine all three queries using UNION
-        $combinedQuery = $clonedQuery1;
+        // $combinedQuery = $clonedQuery1;
 
 
         //For Old NOC details - SOURAV CHAUHAN (25-09-2023)
@@ -1406,8 +1406,8 @@ private function applicantData()
 
         $clonedQuery2 = (clone $query2);
         // Combine all three queries using UNION
-        $combinedQuery = $clonedQuery2;
-        // $combinedQuery = $clonedQuery1->union($clonedQuery2);
+        // $combinedQuery = $clonedQuery2;
+        $combinedQuery = $clonedQuery1->union($clonedQuery2);
 
 
         // $combinedQuery = $clonedQuery1;
@@ -1430,7 +1430,6 @@ private function applicantData()
             ->orderBy($order, $dir)
             ->get();
         $data = [];
-
         foreach ($applications as $key => $application) {
             $nestedData['id'] = $key + 1;
             $applicationNumber = $application->application_no;
@@ -1473,12 +1472,21 @@ private function applicantData()
             }
 
            
-            if($application->updated_at){     
-                $nestedData['updated_at'] = Carbon::parse($application->updated_at)
-                    ->setTimezone('Asia/Kolkata')
-                    ->format('d M Y h:m:s');
+            if (!empty($application->updated_at)) {
+                if (is_numeric($application->updated_at)) {
+                    // old_noc_details.dispatch_date case
+                    $nestedData['updated_at'] = Carbon::createFromTimestamp((int)$application->updated_at)
+                        ->setTimezone('Asia/Kolkata')
+                        ->format('d M Y h:i:s');
+                } else {
+                    // normal datetime case
+                    $nestedData['updated_at'] = Carbon::parse($application->updated_at)
+                        ->setTimezone('Asia/Kolkata')
+                        ->format('d M Y h:i:s');
+                }
+
             } else {
-                $nestedData['updated_at'] = "N/A";
+                $nestedData['updated_at'] = 'N/A';
             }
             $data[] = $nestedData;
         }

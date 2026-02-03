@@ -116,7 +116,7 @@
                     <tr>
                         <th>S.No.</th>
                         <th>Record ID</th>
-                        <th>Colony Code</th>
+                        <th>Colony Name</th>
                         <th>Block</th>
                         <th>Plot No.</th>
                         <th>File Location</th>
@@ -251,7 +251,7 @@
                     },
                     {
                         data: 'colony_code',
-                        name: 'colony_code'
+                        name: 'old_colonies.name'
                     },
                     {
                         data: 'block',

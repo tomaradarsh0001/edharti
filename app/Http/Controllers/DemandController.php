@@ -514,7 +514,7 @@ class DemandController extends Controller
     public function storeDemand(Request $request)
     {
         // dd($request->all());
-        try {
+        // try {
             return DB::transaction(function () use ($request) {
                 $oldPropertyId = $request->oldPropertyId;
 
@@ -525,7 +525,8 @@ class DemandController extends Controller
                         $prevDues = $prevDuesDemandId = null; //initiallize to store demand subheads
 
                         //after latest update no need to check Old demad here - 07-04-2025
-                        $existingDemandData = $this->getExistingPropertyDemand($oldPropertyId, false, false);
+                        $existingDemandData = $this->getExistingPropertyDemand($oldPropertyId,null, false, false);
+                        // dd($existingDemandData);
                         /* if (isset($existingDemandData['dues'])) {
                             // previous dues logic is to berevised so commented on 26 March 2025
                            
@@ -973,11 +974,11 @@ class DemandController extends Controller
                 }
                 return response()->json(['status' => true, 'message' => 'Demand created successfully']);
             });
-        } catch (\Exception $e) {
-            Log::info($e->getMessage());
-            $response = ['status' => false, 'details' => $e->getMessage(), 'data' => 0];
-            return json_encode($response);
-        }
+        // } catch (\Exception $e) {
+        //     Log::info($e->getMessage());
+        //     $response = ['status' => false, 'details' => $e->getMessage(), 'data' => 0];
+        //     return json_encode($response);
+        // }
     }
 
     // public function ApproveDemand($demandId)

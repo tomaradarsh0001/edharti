@@ -112,7 +112,7 @@ return [
             //     ]
             // ],
             'payment_reciept' => [
-                'label' => 'Payment Receipt',
+                'label' => 'Payment Receipt of Property Tax, Electricity Bill, Water Bill, etc',
                 'id' => 'paymentReciept',
                 'multiple' => false,
                 'inputs' => []

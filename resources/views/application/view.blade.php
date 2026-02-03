@@ -55,6 +55,14 @@
         .pagination .active a {
             color: #ffffff !important;
         }
+        .object_remarks{
+            background: #418a8b42;
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+
+        }
 
         .required-error-message {
             display: none;
@@ -322,6 +330,13 @@
                     </table>
                 </div>
             </div>
+            @if($latestMovement['action'] == 'APP_OBJ')
+            <div class="object_remarks">
+                <b>Objection Remark: </b>
+                {{$latestMovement['remarks']}}
+                
+            </div>
+             @endif
             <div class="part-title">
                 <h5>Property Details</h5>
             </div>
@@ -925,6 +940,12 @@
                     @endif
                 </div>
                 <div class="modal-footer justify-content-end">
+                        @if(!empty($scannedFiles['files']) && count($scannedFiles['files']) > 0 && !empty($propertyMasterId))
+                            <a class="btn btn-primary me-2"
+                            href="{{ route('property.scanning.downloadZipByMasterSplit', [$propertyMasterId, $splited_primary_id ?? null]) }}">
+                                Download All (ZIP)
+                            </a>
+                        @endif
                          @if (!empty($scannedFiles['files']))
                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
                         @if ($roles == 'section-officer') onclick='checkScannedFiles()' @endif>Close</button>
