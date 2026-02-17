@@ -538,6 +538,12 @@
                                             class="bx bx-right-arrow-alt"></i>Search Property</a>
                                 </li>
                             @endif
+                            @can('remove.application.or.registration')
+                                <li class="{{ request()->is('remove.application') ? 'active' : '' }}"> <a
+                                        href="{{ route('remove.application') }}"><i class="bx bx-right-arrow-alt"></i>Remove
+                                        Application / Registration</a>
+                                </li>
+                            @endcan
                         </ul>
                     </li>
                 @endcan

@@ -121,6 +121,8 @@
                                         {!! 'L&amp;DO' !!}</option>
                                     <option value="pmu" {{ old('sub_user_type') == 'pmu' ? 'selected' : '' }}>
                                         {!! 'PMU' !!}</option>
+                                    <option value="other" {{ old('sub_user_type') == 'other' ? 'selected' : '' }}>
+                                        {!! 'OTHER' !!}</option>
                                 </select>
                                 <div id="sub_user_typeError" class="text-danger"></div>
                             </div>

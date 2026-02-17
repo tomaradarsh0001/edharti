@@ -21,6 +21,10 @@
             padding: 5px 10px;
             border-radius: 4px;
         }
+        #example_wrapper .dataTable th:nth-child(7) .form-select 
+        { 
+            min-width: 120px; 
+        }
 
         /* Ensure responsiveness on smaller screens */
         @media (max-width: 768px) {
@@ -115,12 +119,19 @@
                 <thead>
                     <tr>
                         <th>S.No.</th>
-                        <th>Record ID</th>
-                        <th>Colony Code</th>
+                        <th>Property ID</th>
+                        <th>Colony Name</th>
                         <th>Block</th>
                         <th>Plot No.</th>
                         <th>File Location</th>
-                        <th>Section</th>
+                        <th>
+                            <select id="sectionFilterRecord" class="form-select form-select-sm">
+                                <option value="">Section</option>
+                                @foreach($sections as $sec)
+                                    <option value="{{ $sec->section_code }}">{{ $sec->section_code }}</option>
+                                @endforeach
+                            </select>
+                        </th>
                         <th>Current Section</th>
                         @if(auth()->user()->hasRole('record-room'))
                             <th>Action</th>
@@ -222,7 +233,10 @@
             });
         });
 
-
+         var sectionParam = (new URLSearchParams(window.location.search)).get('section') || '';
+        if (sectionParam) {
+            $('#sectionFilterRecord').val(sectionParam);
+        }
 
         $(document).ready(function() {
             $('#example').DataTable({
@@ -235,6 +249,7 @@
                         d.locality_record = $('#locality_record').val();
                         d.block_record = $('#block_record').val();
                         d.plot_record = $('#plot_record').val();
+                        d.section_code = $('#sectionFilterRecord').val() || '';//changed by swati on 06022026
                         
                         // d.searchPropertyId = $('#searchPropertyId').val();
                     }
@@ -246,12 +261,12 @@
                         searchable: false
                     },
                     {
-                        data: 'record_id',
-                        name: 'record_id',
+                        data: 'old_property_id',
+                        name: 'old_property_id',
                     },
                     {
                         data: 'colony_code',
-                        name: 'colony_code'
+                        name: 'old_colonies.name'
                     },
                     {
                         data: 'block',
@@ -279,10 +294,46 @@
                             name: 'record_action'
                         }
                     @endif
+                ],
+                dom: '<"top"Blf>rt<"bottom"ip><"clear">',
+
+                buttons: [
+                    {
+                        text: 'CSV',
+                        action: function (e, dt, node, config) {
+                            const params = dt.ajax.params();
+                            delete params.start;
+                            delete params.length;
+
+                            const qs = $.param(params);
+                            window.location = "{{ route('recordRoom.export.csv') }}" + (qs ? ('?' + qs) : '');
+                        }
+                    },
+                    {
+                        text: 'Excel',
+                        action: function (e, dt, node, config) {
+                            const params = dt.ajax.params();
+                            delete params.start;
+                            delete params.length;
+
+                            const qs = $.param(params);
+                            window.location = "{{ route('recordRoom.export.excel') }}" + (qs ? ('?' + qs) : '');
+                        }
+                    }
                 ]
             });
         });
+        $(document).on('change', '#sectionFilterRecord', function () {
+            const url = new URL(window.location.href);
+            const val = $(this).val();
 
+            if (val) url.searchParams.set('section', val);
+            else url.searchParams.delete('section');
+
+            window.history.replaceState({}, '', url);
+
+            $('#example').DataTable().ajax.reload();
+        });
 
         $(document).ready(function() {
             let deleteId;

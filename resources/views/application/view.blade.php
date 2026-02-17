@@ -55,6 +55,14 @@
         .pagination .active a {
             color: #ffffff !important;
         }
+        .object_remarks{
+            background: #418a8b42;
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+
+        }
 
         .required-error-message {
             display: none;
@@ -322,6 +330,13 @@
                     </table>
                 </div>
             </div>
+            @if($latestMovement['action'] == 'APP_OBJ')
+            <div class="object_remarks">
+                <b>Objection Remark: </b>
+                {{$latestMovement['remarks']}}
+                
+            </div>
+             @endif
             <div class="part-title">
                 <h5>Property Details</h5>
             </div>
@@ -925,6 +940,12 @@
                     @endif
                 </div>
                 <div class="modal-footer justify-content-end">
+                        @if(!empty($scannedFiles['files']) && count($scannedFiles['files']) > 0 && !empty($propertyMasterId))
+                            <a class="btn btn-primary me-2"
+                            href="{{ route('property.scanning.downloadZipByMasterSplit', [$propertyMasterId, $splited_primary_id ?? null]) }}">
+                                Download All (ZIP)
+                            </a>
+                        @endif
                          @if (!empty($scannedFiles['files']))
                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
                         @if ($roles == 'section-officer') onclick='checkScannedFiles()' @endif>Close</button>
@@ -1035,7 +1056,7 @@
     <script>
         function handleApplicationAction(action, applicationNo, button, remark = null) {
 
-            var needToconfirm = ((action == 'OBJECT' || action == 'HOLD' || action == 'REJECT_APP') && remark == null);
+            var needToconfirm = ((action == 'RECOMMENDED' || action == 'OBJECT' || action == 'HOLD' || action == 'REJECT_APP') && remark == null);
             if (!needToconfirm) {
                 let allChecked = true;
                 $('.required-for-approve').each(function() {
@@ -1090,6 +1111,7 @@
 
             } else {
                 let allChecked = true;
+                if (action != 'OBJECT') {
                 $('.required-for-approve').each(function() {
                     const $checkbox = $(this);
                     const $errorMsg = $checkbox.siblings('.required-error-message');
@@ -1100,6 +1122,7 @@
                         $errorMsg.hide();
                     }
                 });
+                }
 
                 if (allChecked) {
 
@@ -1148,6 +1171,7 @@
 
         function storeApplicationAction(action, applicationNo, button, remark) {
             let allChecked = true;
+            if (action != 'OBJECT') {
             $('.required-for-approve').each(function() {
                 const $checkbox = $(this);
                 const $errorMsg = $checkbox.siblings('.required-error-message');
@@ -1158,6 +1182,7 @@
                     $errorMsg.hide();
                 }
             });
+            }
 
             if (allChecked) {
                 /** code modified by Nitin as we need to disable everything once user click a button  - 13 Dec 2024*/

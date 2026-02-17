@@ -105,6 +105,7 @@ class OfficialController extends Controller
         $user = Auth::user();
        $roleName = $user->roles->pluck('name')->first();
         $sections = $user->sections->pluck('id');
+        $rsAppId = Item::where('item_code', 'RS_APP')->value('id');
         // Define the query outside of the AJAX block
         $query = UserRegistration::query()
             ->with('oldColony')
@@ -134,6 +135,8 @@ class OfficialController extends Controller
             })
             ->leftjoin('sections', 'sections.id', '=', 'user_registrations.section_id')
             ->leftJoin('flats', 'user_registrations.flat_id', '=', 'flats.id')
+            ->leftJoin('applicant_user_details as aud', 'user_registrations.applicant_number', '=', 'aud.applicant_number')
+            ->leftJoin('users as aud_user', 'aud.user_id', '=', 'aud_user.id')
             ->select(
                 'user_registrations.*',
                 'items.item_name',
@@ -156,6 +159,7 @@ class OfficialController extends Controller
                 'sections.section_code',
                 'sections.name as section_name',
                 'flats.flat_number',
+                'aud_user.status as aud_user_status',
             )
             ->whereIn('section_id', $sections)
             ->orderBy('user_registrations.applicant_number', 'DESC'); // Add this line
@@ -312,6 +316,7 @@ class OfficialController extends Controller
             ];
             $class = $statusClasses[$getRegistrationDetail->item_code] ?? 'text-secondary bg-light';
             $nestedData['status'] = '<span class="' . $class . '">' . ucwords($getRegistrationDetail->item_name) . '</span>';
+            $nestedData['is_inactive_approved'] = ((int)$getRegistrationDetail->status === (int)$rsAppId) && ((int)$getRegistrationDetail->aud_user_status === 0);
             $nestedData['created_at'] = Carbon::parse($getRegistrationDetail->created_at)
                                         ->format('d-m-Y H:i:s');
             if ($user->roles[0]['name'] == 'it-cell') {
@@ -331,14 +336,16 @@ class OfficialController extends Controller
                     <button type="button" class="btn btn-success px-5">View</button>
                 </a>';
             }
-              // Append Resend button only for Approved/Rejected rows added by swati mishra for resend communication on 18082025
-            if (in_array($getRegistrationDetail->item_code, ['RS_APP', 'RS_REJ'])) {
-                $actionBtnHtml .= ' <button type="button" class="btn btn-warning resend-comm-btn" data-id="' . $getRegistrationDetail->id . '">Resend Message</button>';
-            }
-                // Revoke button only for Approved rows
-            if ($getRegistrationDetail->item_code === 'RS_APP') {
-                $actionBtnHtml .= ' <button type="button" class="btn btn-secondary revoke-approval-btn" data-id="' . $getRegistrationDetail->id . '">Revoke Approval</button>';
-            }
+             if ($user->roles[0]['name'] == 'section-officer') {
+                // Append Resend button only for Approved/Rejected rows added by swati mishra for resend communication on 18082025
+                if (in_array($getRegistrationDetail->item_code, ['RS_APP', 'RS_REJ'])) {
+                    $actionBtnHtml .= ' <button type="button" class="btn btn-warning resend-comm-btn" data-id="' . $getRegistrationDetail->id . '">Resend Message</button>';
+                }
+                    // Revoke button only for Approved rows
+                if ($getRegistrationDetail->item_code === 'RS_APP') {
+                    $actionBtnHtml .= ' <button type="button" class="btn btn-secondary revoke-approval-btn" data-id="' . $getRegistrationDetail->id . '">Revoke Approval</button>';
+                }
+             }
             $nestedData['action'] = $actionBtnHtml;
             $data[] = $nestedData;
         }
@@ -976,7 +983,7 @@ class OfficialController extends Controller
                         }
 
                         $applicationController = new ApplicationController();
-                        $data['propertyCommonDetails'] = $applicationController->getPropertyCommonDetails($property['old_propert_id']);
+                        $data['propertyCommonDetails'] = $applicationController->getPropertyCommonDetails($splitedProperty['old_property_id'] ?? $property['old_propert_id']);
                     } else {
                         //Checked if property created if IT Cell for manual property registration - Lalit Tiwari (17/jan/2025)
                         if (!empty($regUserDetails->generated_pid)) {
@@ -3209,7 +3216,7 @@ class OfficialController extends Controller
 
         $data['skipAccessCheck'] = $skipAccessCheck;
         $data['colonies'] = $colonyService->misDoneForColonies(false);
-        $requiredSections = ['LS1', 'LS2A', 'LS2B', 'LS3', 'LS4', 'LS5', 'LS5A', 'LS5B', 'PS1', 'PS2', 'PS3', 'PS4'];
+        $requiredSections = ['LS1', 'LS2A', 'LS2B', 'LS3', 'LS4', 'LS5', 'LS5A', 'LS5B', 'PS1', 'PS2', 'PS3', 'PS4', 'RPC'];
         $data['sections'] = Section::whereIn('section_code', $requiredSections)->get();
 
         return view('property-transfer.index', $data);
@@ -3339,4 +3346,12 @@ class OfficialController extends Controller
             ]);
         });
     }
+
+    
+    public function downloadAll($propertyId)
+    {
+        return GeneralFunctions::downloadAllScannedFilesZipByOldPropertyId($propertyId);
+    }
+
+
 }

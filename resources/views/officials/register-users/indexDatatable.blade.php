@@ -29,6 +29,16 @@
         box-shadow: 0 0 10px #007bff, 0 0 20px #007bff, 0 0 30px #007bff;
         animation: pulse 1.5s infinite;
     }
+    
+        tr.inactive-approved td,
+        table.dataTable.display tbody tr.inactive-approved.odd > .sorting_1, 
+        table.dataTable.order-column.stripe tbody tr.inactive-approved.odd > .sorting_1,
+        tr.inactive-approved td.sorting_1,
+        tr.inactive-approved td.sorting_2,
+        tr.inactive-approved td.sorting_3 {
+            background-color: #f8d7da !important;
+        }
+
         /* Ensure responsiveness on smaller screens */
         @media (max-width: 768px) {
             div.dt-buttons {
@@ -235,8 +245,25 @@ aria-hidden="true">
                     },
                     {
                         data: 'applicant_number',
-                        name: 'applicant_number'
+                        name: 'applicant_number',
+                        render: function (data, type, row) {
+
+                            // Append "Inactive" label for inactive-approved rows
+                            if (row.is_inactive_approved) {
+                                return `
+                                    <div>
+                                        ${data}
+                                        <div style="font-size:15px; color:#8B0000; font-weight:600;">
+                                            Inactive
+                                        </div>
+                                    </div>
+                                `;
+                            }
+
+                            return data;
+                        }
                     },
+
                     {
                         data: 'name',
                         name: 'name'
@@ -466,6 +493,10 @@ aria-hidden="true">
                 ],
                 scrollX: true, // Enable horizontal scrolling
                 createdRow: function(row, data, dataIndex) {
+                    // Highlight Approved (RS_APP) registrations where mapped user is inactive (users.status = 0)
+                    if (data.is_inactive_approved) {
+                        $(row).addClass('inactive-approved');
+                    }
                     // Apply classes to the specific column (assuming documents is the 6th column)
                     var index;
                     @if ($user->roles[0]['name'] == 'deputy-lndo')

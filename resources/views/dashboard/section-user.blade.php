@@ -266,14 +266,60 @@
                 <div class="col-md-12">
                     <div class="card-content-tabs">
                         @foreach ($applicationData as $key=>$details)
+                        @isset($details['application_type'])
+                                <div class="card card-content-section" id="app_{{$key}}">
+                                    <div class="card-body">
+                                     @if($key == 'noc')
+                                       <div class="row">
+                                       	<div class="col-md-6"> 
+                                       	 <h5 class="mb-2" style="color:teal;">NOC with Demand -: ({!! $applicationData['nocDataByDemand']['with_demand_count'] ?? 0 !!})</h5>                                       
+                                       	 <ul>
+                                            @foreach ($applicationData['nocDataByDemand']['with_demand_status_wise'] as $index=>$count)
+                                                @continue(in_array($index,['total', 'application_type', 'APP_DES']))
+                                                                                              
+                                                <li class="d-flex align-items-center justify-content-between" onclick="handleApplicationClick('{{Crypt::encrypt($index)}}', '{{$key}}','{{$index}}','with_demand')">
+                                                    <div class="title-text">{{ getServiceNameByCode($index)}}</div>
+                                                    <div class="title-count">{{$count}}</div>
+                                                </li>
+                                                 @endforeach
+                                        </ul></div>
+                                       	<div class="col-md-6">
+                                       	 <h5 class="mb-2" style="color:teal;">NOC without Demand -: ({!! $applicationData['nocDataByDemand']['without_demand_count'] ?? 0 !!})</h5> <ul>
+                                            @foreach ($applicationData['nocDataByDemand']['without_demand_status_wise'] as $index=>$count)
+                                                @continue(in_array($index,['total', 'application_type', 'APP_DES']))
+                                                                                              
+                                                <li class="d-flex align-items-center justify-content-between" onclick="handleApplicationClick('{{Crypt::encrypt($index)}}', '{{$key}}','{{$index}}','without_demand')">
+                                                    <div class="title-text">{{ getServiceNameByCode($index)}}</div>
+                                                    <div class="title-count">{{$count}}</div>
+                                                </li>
+                                                 @endforeach
+                                        </ul></div>
+                                       	
+                                       </div>
+                                        @else
+                                        <ul>
+                                            @foreach ($details as $index=>$count)
+                                                @continue(in_array($index,['total', 'application_type', 'APP_DES']))
+                                                                                              
+                                                <li class="d-flex align-items-center justify-content-between" onclick="handleApplicationClick('{{Crypt::encrypt($index)}}', '{{$key}}','{{$index}}')">
+                                                    <div class="title-text">{{ getServiceNameByCode($index)}}</div>
+                                                    <div class="title-count">{{$count}}</div>
+                                                </li>
+                                                 @endforeach
+                                        </ul>
+                                        @endif 
+                                    </div>
+                                </div>
+                            @endisset
+
                             
-                            @isset($details['application_type'])
+                            <!-- @isset($details['application_type'])
                                 <div class="card card-content-section" id="app_{{$key}}"> 
                                     <div class="card-body">
                                         <ul>
                                             @foreach ($details as $index=>$count)
                                                 @continue(in_array($index,['total', 'application_type', 'APP_DES']))
-                                                <li class="d-flex align-items-center justify-content-between" onclick="handleApplicationClick('{{Crypt::encrypt($index)}}', '{{$key}}')">
+                                                <li class="d-flex align-items-center justify-content-between" onclick="handleApplicationClick('{{Crypt::encrypt($index)}}', '{{$key}}','{{$index}}')">
                                                     <div class="title-text">{{ getServiceNameByCode($index)}}</div>
                                                     <div class="title-count">{{$count}}</div>
                                                 </li>
@@ -281,7 +327,7 @@
                                         </ul>
                                     </div>
                                 </div>
-                            @endisset
+                            @endisset -->
                         @endforeach
                     </div>
                 </div>
@@ -1507,8 +1553,14 @@
                 url = status ? "{{ route('regiserUserListings', ['status' => '__STATUS__']) }}".replace('__STATUS__',status): "{{ route('regiserUserListings') }}",
                 window.open(url, '_blank');   // open in new tab
             }
-            function handleApplicationClick(status = null, applicationType = null) {
-                let url = "{{ route('admin.applications') }}";
+            function handleApplicationClick(status = null, applicationType = null,decyptedStatus = null,demandType= null) {
+            
+                let url;
+                if(decyptedStatus == 'APP_APR' || decyptedStatus == 'APP_REJ'){
+                     url = "{{ route('applications.disposed') }}";
+                } else {
+                     url = "{{ route('admin.applications') }}";
+                }
                 let params = [];
 
                 if (status) {
@@ -1517,6 +1569,9 @@
 
                 if (applicationType) {
                     params.push('applicationType=' + encodeURIComponent(applicationType));
+                }
+                if (demandType) {
+                    params.push('demandType=' + encodeURIComponent(demandType));
                 }
 
                 if (params.length > 0) {

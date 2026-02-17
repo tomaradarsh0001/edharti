@@ -909,8 +909,13 @@
                                         @endphp
                                             <a href="{{ $url }}">
                                             <button type="button" id="PropertyIDSearchBtn"
-                                                class="btn btn-primary ml-2">Go to Property
-                                                Details</button>
+                                                class="btn btn-primary ml-2">
+                                                 @if ($data['details']->is_property_flat)
+                                                        Go to Flat Details
+                                                @else
+                                                    Go to Property Details
+                                                @endif
+                                            </button>
                                             </a>
                                         </div>
                                     @else
@@ -932,7 +937,13 @@
                                         <div class="btn-group">
                                             <a href="#">
                                                 <button type="button" id="PropertyIDSearchBtn"
-                                                    class="btn btn-primary ml-2" disabled>Go to Property Details</button>
+                                                    class="btn btn-primary ml-2" disabled>
+                                                     @if ($data['details']->is_property_flat)
+                                                        Go to Flat Details
+                                                    @else
+                                                        Go to Property Details
+                                                    @endif
+                                                </button>
                                             </a>
                                         </div>
                                         <div class="w-15">
@@ -1183,8 +1194,13 @@
                                         @endphp
                                             <a href="{{ $url }}">
                                             <button type="button" id="PropertyIDSearchBtn"
-                                                class="btn btn-primary ml-2">Go to Property
-                                                Details</button>
+                                                class="btn btn-primary ml-2">
+                                                 @if ($data['details']->is_property_flat)
+                                                        Go to Flat Details
+                                                @else
+                                                    Go to Property Details
+                                                @endif
+                                            </button>
                                             </a>
                                         </div>
                                         @else
@@ -1206,7 +1222,13 @@
                                             <div class="btn-group">
                                                 <a href="#">
                                                     <button type="button" id="PropertyIDSearchBtn"
-                                                        class="btn btn-primary ml-2" disabled>Go to Property Details</button>
+                                                        class="btn btn-primary ml-2" disabled>
+                                                        @if ($data['details']->is_property_flat)
+                                                            Go to Flat Details
+                                                        @else
+                                                            Go to Property Details
+                                                        @endif
+                                                    </button>
                                                 </a>
                                             </div>
                                             <div class="w-15">
@@ -1454,8 +1476,13 @@
                                         @endphp
                                             <a href="{{ $url }}">
                                             <button type="button" id="PropertyIDSearchBtn"
-                                                class="btn btn-primary ml-2">Go to Property
-                                                Details</button>
+                                                class="btn btn-primary ml-2">
+                                                 @if ($data['details']->is_property_flat)
+                                                    Go to Flat Details
+                                                @else
+                                                    Go to Property Details
+                                                @endif
+                                            </button>
                                             </a>
                                         </div>
                                         @else
@@ -1478,8 +1505,13 @@
                                             <div class="btn-group">
                                                 <a href="#">
                                                     <button type="button" id="PropertyIDSearchBtn"
-                                                        class="btn btn-primary ml-2" disabled>Go to Property
-                                                        Details</button>
+                                                        class="btn btn-primary ml-2" disabled>
+                                                         @if ($data['details']->is_property_flat)
+                                                            Go to Flat Details
+                                                        @else
+                                                            Go to Property Details
+                                                        @endif
+                                                    </button>
                                                 </a>
                                             </div>
                                             <div class="w-15">
@@ -1815,6 +1847,13 @@
                     @else
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     @endif --}}
+                    @if(!empty($data['oldPropertyId']) && !empty($scannedFiles['files']) && count($scannedFiles['files']) > 0)
+                        <a href="{{ route('property.scanning.downloadAll', $data['oldPropertyId']) }}"
+                        class="btn btn-primary">
+                        Download All (ZIP)
+                        </a>
+
+                    @endif
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>

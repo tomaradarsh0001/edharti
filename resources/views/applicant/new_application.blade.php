@@ -775,7 +775,7 @@
                 },
                 success: function(response) {
                     if (response.status) {
-                        if (response.data.status == '952') {
+                        if (response.data.status === '952' || response.data.status === 952) {
                             $('#propertyStatus').val('Free Hold');
                             $('#freeleasetitle').html('Details of Conveyance Deed');
                             console.log($('#freeleasetitle'));

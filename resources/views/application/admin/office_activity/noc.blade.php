@@ -144,6 +144,17 @@
 
 <div class="row">
     <div class="d-flex justify-content-end gap-4 col-lg-12" id="action-btn-container">
+        @if (
+            ($roles === 'section-officer' || $roles === 'deputy-lndo') &&
+                empty($latestMovement->remarks) &&
+                $latestMovement->is_forwarded !== 1 &&
+                $showActionButtons &&
+                empty($application->letter) &&
+                !isset($latestAppAction))
+            <button type="button" onclick="handleApplicationAction('OBJECT','{{ $details->application_no }}',this)"
+                class="btn btn-warning">Object</button>
+        @endif
+        
         @if ($showActionButtons)
             @if ($roles === 'section-officer')
                 @if ($application->letter)

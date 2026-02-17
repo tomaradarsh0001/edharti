@@ -16,6 +16,9 @@ use App\Mail\TestMail;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use App\Models\Flat;
+use App\Models\Section;
+use Illuminate\Support\Facades\Auth;
+
 
 class CommonController extends Controller
 {
@@ -111,6 +114,8 @@ class CommonController extends Controller
 
         // added by swati on 07012026 : store master old property id for split-info message
         $masterOldPropertyId = null;
+        $masterSectionCode = null;
+        $masterSectionName = null;
 
         $propertyId = $request->property_id;
 
@@ -172,7 +177,7 @@ class CommonController extends Controller
                 if ($children->count() == 0) {
                     return ['status' => 'error', 'message' => 'Can not Process this property. Please check property details'];
                 } else {
-                    $propertyData = [];
+                    /* $propertyData = [];
                     foreach ($children as $child) {
                         $propertyData[] = $this->preparePropertyDetails(
                             $child->master,
@@ -180,7 +185,25 @@ class CommonController extends Controller
                             $child->id,
                             $propertyMasterId
                         );
+                    } */
+                    $userIsItCell = Auth::user()->hasRole('it-cell');
+                    $propertyData = [];
+
+                    foreach ($children as $child) {
+                        $details = $this->preparePropertyDetails(
+                            $child->master,
+                            true,
+                            $child->id,
+                            $propertyMasterId
+                        );
+
+                        if ($userIsItCell) {
+                            $propertyData = $details; // Overwrite for it-cell
+                        } else {
+                            $propertyData[] = $details; // Append for others
+                        }
                     }
+
                 }
             } else {
                 $propertyData = $this->preparePropertyDetails($property, false, null, $propertyMasterId);
@@ -188,6 +211,11 @@ class CommonController extends Controller
 
             // added by swati on 07012026 : master old property id for split-info message (property master path)
             $masterOldPropertyId = $property->old_propert_id ?? null;
+            // added by swati on 12012026 : master section for current section display (property master path)
+            $masterSectionCode = $property->section_code ?? null; // added by swati on 12012026
+            if (!empty($masterSectionCode)) { // added by swati on 12012026
+                $masterSectionName = Section::where('section_code', $masterSectionCode)->value('name'); // added by swati on 12012026
+            }
 
         } else {
             $propertyData = $this->preparePropertyDetails(
@@ -199,6 +227,11 @@ class CommonController extends Controller
 
             // added by swati on 07012026 : master old property id for split-info message (split detail path)
             $masterOldPropertyId = $property->master->old_propert_id ?? null;
+            // added by swati on 12012026 : master section for current section display (split detail path)
+            $masterSectionCode = $property->master->section_code ?? null; // added by swati on 12012026
+            if (!empty($masterSectionCode)) { // added by swati on 12012026
+                $masterSectionName = Section::where('section_code', $masterSectionCode)->value('name'); // added by swati on 12012026
+            }
         }
 
         // Fetch Flat details if exists by Lalit (19/December/2025)
@@ -208,12 +241,16 @@ class CommonController extends Controller
 
         // added by swati on 07012026 : meta block added for split-info message (non-breaking for existing pages)
         return [
-            'status' => 'success',
-            'data' => $propertyData,
-            'meta' => [
-                'searched_id' => $searchedId,
-                'is_splitted_search' => $isSplittedSearch,
-                'master_old_property_id' => $masterOldPropertyId,
+                'status' => 'success',
+                'data' => $propertyData,
+                'meta' => [
+                    'searched_id' => $searchedId,
+                    'is_splitted_search' => $isSplittedSearch,
+                    'master_old_property_id' => $masterOldPropertyId,
+                    // added by swati on 12012026 : master section details for current section display
+                    'master_section_code' => $masterSectionCode, // added by swati on 12012026
+                    'master_section_name' => $masterSectionName, // added by swati on 12012026
+            
             ]
         ];
     }

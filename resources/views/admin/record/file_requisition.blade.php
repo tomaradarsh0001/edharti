@@ -20,6 +20,10 @@
             position: relative;
         }
 
+        @page {
+            margin: 15px;  /* Sets a 0.5 inch margin on all sides */ 
+        } 
+
         @media print {
             @page {
                 margin: 0.5in;  /* Sets a 0.5 inch margin on all sides */ 
@@ -28,6 +32,10 @@
                 margin:0;
                 padding: 0;
             }
+        }
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
         }
         
         body::before {
@@ -42,7 +50,7 @@
             opacity: 0.1;
         }
 
-        body::after {
+        /* body::after {
             content: "";
             position: absolute;
             width: 200%;
@@ -53,6 +61,18 @@
             background: url(assets/images/water-mark.png) 0 0 repeat;
             transform: rotate(-30deg);
             opacity: 0.1;
+        } */
+        
+        .watermark {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url("{{ public_path('assets/images/water-mark.png') }}") repeat;
+            transform: rotate(-30deg);
+            opacity: 0.1;
+            z-index: -99;
         }
 
         .emblem-div {
@@ -67,7 +87,7 @@
 
         .title-main {
             color: navy;
-            font-size: 16px;
+            font-size: 12px;
             font-weight: bold;
             text-align: center;
             margin: 0;
@@ -75,7 +95,7 @@
 
         .title-sub {
             color: navy;
-            font-size: 10px;
+            font-size: 8px;
             font-weight: bold;
             text-align: center;
             margin: 0;
@@ -95,15 +115,15 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 10px;
-            margin-top: 10px;
+            /* margin-top: 10px; */
         }
 
         th,
         td {
-            border: 1px solid #ccc;
+            border: 1px solid #9c9c9c;
             padding:5px 8px;
             text-align: left;
-            font-size: 14px;
+            font-size: 12px;
         }
 
         th {
@@ -115,7 +135,7 @@
             margin:0;
         }
         .content-wrap p{
-            font-size: 14px;
+            font-size: 12px;
         }
         .name-sign{
             font-size: 25px;
@@ -124,24 +144,38 @@
         .qr-img{
             text-align: center;
         }
+        .hidden-table {
+            margin-bottom: 0;
+        }
+
+        .hidden-table th {
+            border: 0;
+            font-size: 12px;
+            vertical-align: top;
+            margin: 0 0 10px;
+            padding: 5px 5px;
+        }
+
         .hidden-table,
         .hidden-table th,
         .hidden-table td{
             border:0;
-            font-size:14px;
+            font-size:10px;
             vertical-align: top;
-            padding:5px 0;
+            padding:5px 5px;
         }
         .hidden-table th p,
         .hidden-table td p{
+            font-size:12px;
             margin: 0;
         }
-        .letter-footer {
-            
+        .letter-footer .ldo-sign {
+            font-size:12px;
         }
     </style>
 
 <body>
+    <div class="watermark"></div>
     <!-- Login 8 section start -->
     <div class="content-wrap">
 
@@ -150,7 +184,7 @@
 
         <!-- Emblem Image -->
         <div class="emblem-div">
-            <img src="assets/images/emblem.png" width="40" alt="Emblem" class="emblem">
+            <img src="assets/images/emblem.jpg" width="40" alt="Emblem" class="emblem">
         </div>
 
         <!-- Main Title -->

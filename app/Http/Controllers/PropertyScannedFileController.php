@@ -14,8 +14,9 @@ use App\Models\PropertyScannedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use ZipArchive;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Helpers\GeneralFunctions;
+use App\Models\PropertyScannedRequest;
+
 class PropertyScannedFileController extends Controller
 {
     // public function create()
@@ -133,36 +134,54 @@ class PropertyScannedFileController extends Controller
             'documents.*'        => 'required|file|mimes:pdf|max:20480', // 20MB each
         ]);
 
-        $propertyId = $request->input('property_id');
-        $colonyName = $request->input('present_colony_name');
-        $safeColony = Str::slug($colonyName ?? '', '_') ?: 'unknown_colony';
+        return DB::transaction(function () use ($request) {
 
-        foreach ($request->file('documents') as $file) {
-            // Use the original filename (without extension) as old_property_file_name
-            $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $propertyId = $request->input('property_id'); // old_property_id
+            $colonyName = $request->input('present_colony_name');
+            $safeColony = Str::slug($colonyName ?? '', '_') ?: 'unknown_colony';
 
-            // sanitize (avoid slashes, special chars)
-            $oldFileName = Str::slug($originalName, '_') ?: ('FILE_' . time());
+            foreach ($request->file('documents') as $file) {
+                $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+                $oldFileName  = Str::slug($originalName, '_') ?: ('FILE_' . time());
+                $ext          = $file->getClientOriginalExtension() ?: 'pdf';
 
-            $ext = $file->getClientOriginalExtension() ?: 'pdf';
+                $newFilePath = "documents/{$safeColony}/{$propertyId}/scannedFiles/{$oldFileName}.{$ext}";
+                Storage::disk('public')->put($newFilePath, file_get_contents($file->getRealPath()));
 
-            $newFilePath = "documents/{$safeColony}/{$propertyId}/scannedFiles/{$oldFileName}.{$ext}";
+                PropertyScannedFile::create([
+                    'property_master_id'         => $request->input('property_master_id'),
+                    'splited_property_detail_id' => $request->input('splited_property_detail_id') ?: null,
+                    'flat_id'                    => $request->input('flat_id') ?: null,
+                    'colony_name'                => $colonyName,
+                    'old_property_id'            => $propertyId,
+                    'old_property_file_name'     => $oldFileName,
+                    'document_path'              => $newFilePath,
+                ]);
+            }
 
-            Storage::disk('public')->put($newFilePath, file_get_contents($file->getRealPath()));
+            // ✅ Close scanning request ONLY if it exists and is not already closed
+            $closedItemId = DB::table('items')->where('item_code', 'SCAN_CLOSED')->value('id');
+            $requestClosed = false;
 
-            PropertyScannedFile::create([
-                'property_master_id'         => $request->input('property_master_id'),
-                'splited_property_detail_id' => $request->input('splited_property_detail_id') ?: null,
-                'flat_id'                    => $request->input('flat_id') ?: null,
-                'colony_name'                => $colonyName,
-                'old_property_id'            => $propertyId,
-                'old_property_file_name'     => $oldFileName,
-                'document_path'              => $newFilePath,
-            ]);
-        }
+            if ($closedItemId) {
+                $openRequests = PropertyScannedRequest::where('old_property_id', $propertyId)
+                    ->where('status', '!=', $closedItemId);
 
-        return redirect()->route('property.scanning.create')
-            ->with('success', 'All scanned documents saved successfully.');
+                if ($openRequests->exists()) {
+                    $openRequests->update([
+                        'status'     => $closedItemId,
+                        'updated_at' => now(),
+                    ]);
+                    $requestClosed = true;
+                }
+            }
+
+            $msg = $requestClosed
+                ? 'All scanned documents saved successfully. Request closed.'
+                : 'All scanned documents saved successfully.';
+
+            return redirect()->route('property.scanning.create')->with('success', $msg);
+        });
     }
 
 
@@ -447,47 +466,32 @@ public function scanningReport()
     return view('property_scanning.scanning-report', compact('totalCount', 'sectionCounts'));
 }
 
-public function downloadAll($propertyId)
-{
-    $files = PropertyScannedFile::where('old_property_id', $propertyId)
-        ->orderBy('id', 'asc')
-        ->get(['old_property_file_name', 'document_path']);
-
-    if ($files->isEmpty()) {
-        return back()->withErrors(['documents' => 'No files found for this property to download.']);
+    public function downloadAll($propertyId)
+    {
+        return GeneralFunctions::downloadAllScannedFilesZipByOldPropertyId($propertyId);
     }
 
-    $zipFileName = "property_{$propertyId}_scanned_files.zip";
-    $zipPath = storage_path("app/tmp/{$zipFileName}");
+    public function downloadZipByMasterSplit($propertyMasterId, $splitId = null)
+    {
+        $query = PropertyScannedFile::where('property_master_id', $propertyMasterId)
+            ->when($splitId, function ($q) use ($splitId) {
+                return $q->where('splited_property_detail_id', $splitId);
+            }, function ($q) {
+                return $q->whereNull('splited_property_detail_id');
+            })
+            ->orderBy('id', 'asc');
 
-    // Ensure tmp dir exists
-    if (!is_dir(dirname($zipPath))) {
-        mkdir(dirname($zipPath), 0755, true);
+        // Fetch files
+        $files = $query->get(['document_name', 'document_path']);
+
+        // 🔹 Get old_property_id safely (from first row)
+        $oldPropertyId = $query->value('old_property_id') ?? $propertyMasterId;
+
+        return GeneralFunctions::downloadZipFromScannedFiles(
+            $files,
+            "{$oldPropertyId}_scanned_files"
+        );
     }
-
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        return back()->withErrors(['documents' => 'Unable to create ZIP file.']);
-    }
-
-    foreach ($files as $f) {
-        // stored on public disk in your code
-        if (!Storage::disk('public')->exists($f->document_path)) {
-            continue;
-        }
-
-        $ext = pathinfo($f->document_path, PATHINFO_EXTENSION) ?: 'pdf';
-        $downloadName = ($f->old_property_file_name ?: 'document') . '.' . $ext;
-
-        $absolutePath = Storage::disk('public')->path($f->document_path);
-        $zip->addFile($absolutePath, $downloadName);
-    }
-
-    $zip->close();
-
-    // Stream ZIP and delete after send
-    return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
-}
 
 
 }

@@ -22,7 +22,7 @@ class Kernel extends ConsoleKernel
             $schedule->job(new DeactivateUsersWithInactiveApplications)->dailyAt('12:00');
             $schedule->command('demand:withdraw')->dailyAt('11:00');
             $schedule->command('app:update-action-taken-by')->dailyAt('11:00');
-           $schedule->command('clear:otps')->everyFiveMinutes();
+           $schedule->command('clear:otps')->hourly();
             $schedule->command('app:revert-user-registration-to-section')->dailyAt('11:00');
             $schedule->command('app:check-pending-payment-status')->hourly();
     }

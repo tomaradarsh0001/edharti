@@ -133,7 +133,7 @@ class RegisteredUserController extends Controller
                         if (isset($request->propertyId)) {
                             $locality   = null;
                             $locality_name   = strtolower($request->localityInvFill);
-                            $block      = $request->blocknoInvFill;
+                            $block      = isset($request->blocknoInvFill) ? $request->blocknoInvFill : '-';
                             $plot       = $request->plotnoInvFill;
                             $knownAs    = $request->knownasInvFill;
                             $landUseType    = $request->landUseInvFill;
@@ -415,7 +415,7 @@ class RegisteredUserController extends Controller
                                     'is_property_id_known' => $propertyDetailsFilled,
                                     'locality' => $locality,
                                     'locality_name' => $locality_name, // Added on 15/jan/2025 By Lalit Tiwari
-                                    'block' => $block,
+                                    'block' => $block ?? '-',
                                     'plot' => $plot,
                                     'flat_id' => $flat_id ?? null,
                                     'is_property_flat' => $is_property_flat ?? 0,

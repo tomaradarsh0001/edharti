@@ -79,6 +79,10 @@ class DashboardController extends Controller
         } 
         elseif ($user->hasRole('internal-audit-cell')) {
             return redirect(route('demandList'));
+        } elseif ($user->hasRole('record-room')) {
+            $data = self::getRecordData();
+            // dd($data);
+            return view('dashboard.record-report', $data);
         }
 
            else {
@@ -489,11 +493,32 @@ class DashboardController extends Controller
         return $data;
     }
 
+    private static function getRecordData()
+    {
+        $total = DB::table('record_room_files')->count();
+
+        $sectionWise = DB::table('record_room_files as rrf')
+            ->join('sections as s', 's.section_code', '=', 'rrf.section_code')
+            ->where('s.has_property', 1)
+            ->select('rrf.section_code', DB::raw('COUNT(*) as total'))
+            ->groupBy('rrf.section_code')
+            ->get();
+
+        // convert to ["PS1" => 123, "PS2" => 45]
+        $sectionCounts = $sectionWise->pluck('total', 'section_code')
+            ->mapWithKeys(fn($v, $k) => [strtoupper(trim($k)) => (int) $v])
+            ->toArray();
+
+        return [
+            'total_records'  => $total,
+            'section_counts' => $sectionCounts,
+        ];
+    }
+
     private function getSectionData()
     {
         $data['revenueDetails'] = getRevenueDetails();
         $data['pendingApplicationNewSummary'] = $this->pendingApplicationNewSummary();
-        // dd($data);
         /**Code added by Nitin to get dynamic status of applications */
         $user = Auth::user();
         $sections = $user->sections->where('has_property',1);
@@ -895,13 +920,27 @@ class DashboardController extends Controller
         $totalApprovalCount = array_sum($approvalCounts);
 
 
-$dateStart = '2006-02-14';
+            $dateStart = '2006-02-14';
             $dateEnd = '2017-05-01';
 
-            $nocWithDemandsQuery = $clonedNocQuery->leftJoin(DB::raw("
-                (SELECT * FROM property_lease_details 
-                WHERE doe BETWEEN '$dateStart' AND '$dateEnd') as pld
-            "), 'pm.id', '=', 'pld.property_master_id');
+//            $nocWithDemandsQuery = $clonedNocQuery->leftJoin(DB::raw("
+//                (SELECT * FROM property_lease_details 
+//                WHERE doe BETWEEN '$dateStart' AND '$dateEnd') as pld
+//            "), 'pm.id', '=', 'pld.property_master_id');
+               $nocWithDemandsQuery = $clonedNocQuery->leftJoin(DB::raw("
+			    (
+			        SELECT ptld1.*
+			        FROM property_transferred_lessee_details ptld1
+			        INNER JOIN (
+			            SELECT MAX(id) as max_id
+			            FROM property_transferred_lessee_details
+			            WHERE process_of_transfer = 'Conversion'
+			            AND transferDate BETWEEN '$dateStart' AND '$dateEnd'
+			            GROUP BY property_master_id
+			        ) ptld2 ON ptld1.id = ptld2.max_id
+			    ) as pld
+			"), 'pm.id', '=', 'pld.property_master_id');
+
 
             // Clone for with/without
             $withDemandQuery = clone $nocWithDemandsQuery;
@@ -1310,7 +1349,7 @@ private function applicantData()
                         ->where('latest_statuses.row_num', '=', 1); // Ensures only the latest record
                 }
             )
-            ->whereIn('noc.section_id', $sections) // Verify $sections is an array
+            // ->whereIn('noc.section_id', $sections) // Verify $sections is an array (it is commented for subregistrar as he has no sectioned assigned) // 30 Jan 2026 - SOURAV CHAUHAN
             ->select(
                 'noc.updated_at',
                 'noc.application_no',
@@ -1363,7 +1402,7 @@ private function applicantData()
 
         $clonedQuery1 = (clone $query1);
         // Combine all three queries using UNION
-        $combinedQuery = $clonedQuery1;
+        // $combinedQuery = $clonedQuery1;
 
 
         //For Old NOC details - SOURAV CHAUHAN (25-09-2023)
@@ -1406,8 +1445,8 @@ private function applicantData()
 
         $clonedQuery2 = (clone $query2);
         // Combine all three queries using UNION
-        $combinedQuery = $clonedQuery2;
-        // $combinedQuery = $clonedQuery1->union($clonedQuery2);
+        // $combinedQuery = $clonedQuery2;
+        $combinedQuery = $clonedQuery1->union($clonedQuery2);
 
 
         // $combinedQuery = $clonedQuery1;
@@ -1430,7 +1469,6 @@ private function applicantData()
             ->orderBy($order, $dir)
             ->get();
         $data = [];
-
         foreach ($applications as $key => $application) {
             $nestedData['id'] = $key + 1;
             $applicationNumber = $application->application_no;
@@ -1473,12 +1511,21 @@ private function applicantData()
             }
 
            
-            if($application->updated_at){     
-                $nestedData['updated_at'] = Carbon::parse($application->updated_at)
-                    ->setTimezone('Asia/Kolkata')
-                    ->format('d M Y h:m:s');
+            if (!empty($application->updated_at)) {
+                if (is_numeric($application->updated_at)) {
+                    // old_noc_details.dispatch_date case
+                    $nestedData['updated_at'] = Carbon::createFromTimestamp((int)$application->updated_at)
+                        ->setTimezone('Asia/Kolkata')
+                        ->format('d M Y h:i:s');
+                } else {
+                    // normal datetime case
+                    $nestedData['updated_at'] = Carbon::parse($application->updated_at)
+                        ->setTimezone('Asia/Kolkata')
+                        ->format('d M Y h:i:s');
+                }
+
             } else {
-                $nestedData['updated_at'] = "N/A";
+                $nestedData['updated_at'] = 'N/A';
             }
             $data[] = $nestedData;
         }

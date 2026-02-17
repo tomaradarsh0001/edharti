@@ -113,6 +113,8 @@
 
     $('#payemntType').change(function() {
         const selectedPaymentType = $(this).val();
+        $('#paymentDetails').html("");
+        $('#paymentDetailsRow').addClass('d-none');
         const additionalInputDiv = $('#additionalInputDiv');
         const submitButtonDiv = $('#submitButtonDiv');
         const selectedOption = $(this).find('option:selected');

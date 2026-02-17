@@ -824,11 +824,11 @@ class ReportController extends Controller
 
 
         //modified by Nitin on 21-04-2025. This was selecting all the sections in frontend
-        if (!empty($sections) && !(isset($filters['section_id']) && count($filters['section_id']) > 0)) {
+        /* if (!empty($sections) && !(isset($filters['section_id']) && count($filters['section_id']) > 0)) {
             //if section is not included in filter request
             $filters['section_id'] = $sections->pluck('id')->toArray();
             $clearSectionIdFilter = true;
-        }
+        } */
 
         if ($request->export == 1) {
             $email = $user->email;
