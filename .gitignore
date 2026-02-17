@@ -1,0 +1,6 @@
+/vendor
+/node_modules
+.env
+/storage
+/storage/logs
+/app/Providers/AppServiceProvider.php
