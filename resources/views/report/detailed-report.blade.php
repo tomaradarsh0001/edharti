@@ -96,7 +96,7 @@
                                 <select class="selectpicker" multiple aria-label="Search by section" data-live-search="true" title="Section" id="section_filter" name="section_id[]">
                                     <option value="">All</option>
                                     @foreach ($sections as $section)
-                                    <option value="{{$section->section_code}}" {{(isset($filters['section_id'] ) && in_array($section->section_code, $filters['section_id'] )) ? 'selected':''}}><?= $section->name ?></option>
+                                    <option value="{{$section->id}}" {{(isset($filters['section_id'] ) && in_array($section->id, $filters['section_id'] )) ? 'selected':''}}><?= $section->name ?></option>
                                     @endforeach
                                 </select>
                                 <button type="button" class="input-reset-icon" data-targets="#section_filter"><i class="lni lni-cross-circle"></i></button>
@@ -440,11 +440,12 @@
     })
 
     function resetFilters() {
-        debugger;
+        /* debugger;
         $('.input-reset-icon').each(function() {
             $(this).click();
         })
-        $('button[type="submit"]').click();
+        $('button[type="submit"]').click(); */
+        window.location.href = "{{ route('detailedReport') }}";
     }
 
     $(document).ready(function() {

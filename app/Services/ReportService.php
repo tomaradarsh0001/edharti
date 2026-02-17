@@ -601,17 +601,25 @@ class ReportService
     }
     public function detailedReport($filter = [], $export = false, $perpage = null, $page = null)
     {
-        // Start building the query
-        $filterUserSections = false;
-        $userSectionIdList = [];
-        // if (!$export) {
         $user = Auth::user();
-        //filter by section when section filter is in request or user has role section officer // added by nitin on 27 feb 2025
-        $filterUserSections = isset($filter['section_id']) ? true : $user->hasAnyRole('section-officer', 'deputy-lndo');
-        $userSectionIdList = isset($filter['section_id']) ? $filter['section_id'] : $user->sections->pluck('section_code')->toArray();
-        // }
-        // dd($filter['section_id'], $filterUserSections, $userSectionIdList);
 
+        // Determine if we need to filter by user sections
+        $filterUserSections = isset($filter['section_id']) || $user->hasAnyRole('section-officer', 'deputy-lndo');
+        $userSectionIdList = isset($filter['section_id'])
+            ? $filter['section_id']
+            : ($user->sections->pluck('section_code')->toArray() ?? []);
+
+        
+
+        $sectionCodes = DB::table('sections')
+            ->whereIn('id', $userSectionIdList)
+            ->pluck('section_code')
+            ->toArray();
+        
+        // dd($sectionCodes);
+
+
+        // Start building the query
         $query = DB::table('property_masters as pm')
             ->select(
                 'pm.id',
@@ -622,8 +630,6 @@ class ReportService
                 'pm.property_sub_type',
                 'pm.land_type',
                 DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pm.status ELSE spd.property_status END AS property_status'),
-                /* 'pm.file_no', */
-                // 'sections.section_code as section',
                 'pm.section_code as section',
                 DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pld.presently_known_as ELSE spd.presently_known_as END AS address'),
                 DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pld.plot_area_in_sqm ELSE spd.area_in_sqm END AS area_in_sqm'),
@@ -645,6 +651,11 @@ class ReportService
                     });
             });
 
+        // Apply user section filter if needed - BEFORE other filters
+        if ($sectionCodes && !empty($userSectionIdList)) {
+            $query->whereIn('pm.section_code', $sectionCodes);
+        }
+
         // Join items table for property_type, property_sub_type, and property_status
         $query->leftJoin('items as item_type', 'item_type.id', '=', 'pm.property_type')
             ->leftJoin('items as latest_item_type', 'latest_item_type.id', '=', 'pld.property_type_at_present')
@@ -653,26 +664,7 @@ class ReportService
             ->leftJoin('items as latest_item_sub_type', 'latest_item_sub_type.id', '=', 'pld.property_sub_type_at_present')
             ->leftJoin('items as item_property_status', function ($join) {
                 $join->on('item_property_status.id', '=', DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pm.status ELSE spd.property_status END'));
-            })
-            /* ->when($filterUserSections, function ($query) use ($userSectionIdList) {
-                return $query->join('property_section_mappings as psm', function ($join) use ($userSectionIdList) {
-                    $join->on('pm.new_colony_name', '=', 'psm.colony_id');
-                    $join->whereColumn('pm.property_type', 'psm.property_type');
-                    $join->whereColumn('pm.property_sub_type', 'psm.property_subtype');
-                    $join->whereIn('psm.section_id', $userSectionIdList);
-                });
-            }, function ($query) {
-                return $query->leftJoin('property_section_mappings as psm', function ($join) {
-                    $join->on('pm.new_colony_name', '=', 'psm.colony_id');
-                    $join->whereColumn('pm.property_type', 'psm.property_type');
-                    $join->whereColumn('pm.property_sub_type', 'psm.property_subtype');
-                });
-            })
-            ->leftJoin('sections', 'psm.section_id', 'sections.id')*/
-            /* ->when(!empty($userSectionIdList), function($que) use($userSectionIdList){
-                return $que->whereIn('pm.section_code',$userSectionIdList);
-            }) */
-            ;
+            });
 
         // Select item names
         $query->addSelect(
@@ -683,6 +675,8 @@ class ReportService
             'latest_item_type.item_name as latestPropertyType',
             'latest_item_sub_type.item_name as latestPropertySubType',
         );
+
+        // Add export-specific columns only when needed
         if ($export || ($perpage && $page)) {
             $query->addSelect(
                 'pm.unique_file_no',
@@ -719,62 +713,51 @@ class ReportService
                 DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN COALESCE(pld.present_ground_rent, pld.gr_in_re_rs) ELSE COALESCE(spd.present_ground_rent, pld.gr_in_re_rs) END AS ground_rent')
             )
                 ->leftJoin('old_colonies as oc', 'pm.new_colony_name', '=', 'oc.id')
-                ->leftJoin('property_inspection_demand_details as pid', function ($join) {
-                    $join->on('pm.id', '=', 'pid.property_master_id')
-                        ->where(function ($query) {
-                            $query->where(function ($query) {
-                                $query->whereNull('pm.is_joint_property')
-                                    ->whereNull('pid.splited_property_detail_id');
-                            })->orWhere(function ($query) {
-                                $query->whereNotNull('pm.is_joint_property')
-                                    ->whereColumn('spd.id', '=', 'pid.splited_property_detail_id');
-                            });
+                ->leftJoin('users', 'pm.created_by', '=', 'users.id');
+
+            // Add conditional joins for split properties
+            $query->leftJoin('property_inspection_demand_details as pid', function ($join) {
+                $join->on('pm.id', '=', 'pid.property_master_id')
+                    ->where(function ($q) {
+                        $q->where(function ($q2) {
+                            $q2->whereNull('pm.is_joint_property')
+                                ->whereNull('pid.splited_property_detail_id');
+                        })->orWhere(function ($q2) {
+                            $q2->whereNotNull('pm.is_joint_property')
+                                ->whereColumn('spd.id', '=', 'pid.splited_property_detail_id');
                         });
-                })
+                    });
+            })
                 ->leftJoin('property_contact_details as pcd', function ($join) {
                     $join->on('pm.id', '=', 'pcd.property_master_id')
-                        ->where(function ($query) {
-                            $query->where(function ($query) {
-                                $query->whereNull('pm.is_joint_property')
+                        ->where(function ($q) {
+                            $q->where(function ($q2) {
+                                $q2->whereNull('pm.is_joint_property')
                                     ->whereNull('pcd.splited_property_detail_id');
-                            })->orWhere(function ($query) {
-                                $query->whereNotNull('pm.is_joint_property')
+                            })->orWhere(function ($q2) {
+                                $q2->whereNotNull('pm.is_joint_property')
                                     ->whereColumn('spd.id', '=', 'pcd.splited_property_detail_id');
                             });
                         });
                 })
                 ->leftJoin('property_misc_details as pmd', function ($join) {
                     $join->on('pm.id', '=', 'pmd.property_master_id')
-                        ->where(function ($query) {
-                            $query->where(function ($query) {
-                                $query->whereNull('pm.is_joint_property')
+                        ->where(function ($q) {
+                            $q->where(function ($q2) {
+                                $q2->whereNull('pm.is_joint_property')
                                     ->whereNull('pmd.splited_property_detail_id');
-                            })->orWhere(function ($query) {
-                                $query->whereNotNull('pm.is_joint_property')
+                            })->orWhere(function ($q2) {
+                                $q2->whereNotNull('pm.is_joint_property')
                                     ->whereColumn('spd.id', '=', 'pmd.splited_property_detail_id');
                             });
                         });
-                })
-                /* ->leftJoin('current_lessee_details as cld', function ($join) {
-                    $join->on('pm.id', '=', 'cld.property_master_id')
-                        ->where(function ($query) {
-                            $query->where(function ($query) {
-                                $query->whereNull('pm.is_joint_property')
-                                    ->whereNull('cld.splited_property_detail_id');
-                            })->orWhere(function ($query) {
-                                $query->whereNotNull('pm.is_joint_property')
-                                    ->whereColumn('spd.id', '=', 'cld.splited_property_detail_id');
-                            });
-                        });
-                }) */
-                ->leftJoin('users', 'pm.created_by', '=', 'users.id');
+                });
 
-            // Join items for land_type, lease_type, present property type and subtype
+            // Join items for additional export fields
             $query->leftJoin('items as lease_type_names', 'lease_type_names.id', '=', 'pld.type_of_lease')
                 ->leftJoin('items as item_present_type_names', 'item_present_type_names.id', '=', 'pld.property_type_at_present')
                 ->leftJoin('items as item_present_sub_type_names', 'item_present_sub_type_names.id', '=', 'pld.property_sub_type_at_present');
 
-            // Add item names to select
             $query->addSelect(
                 'lease_type_names.item_name as leaseDeed',
                 'item_present_type_names.item_name as presentPropertyType',
@@ -782,44 +765,275 @@ class ReportService
             );
         }
 
-
-        // Apply filters
+        // Apply request filters if provided
         if (!empty($filter)) {
-            if (isset($filter['colony'])) {
+            // Apply each filter only if it exists and has a value
+            if (isset($filter['colony']) && !empty($filter['colony'])) {
                 $query->whereIn('pm.new_colony_name', $filter['colony']);
             }
+
             if (isset($filter['landType']) && $filter['landType'] != "") {
                 $query->where('pm.land_type', $filter['landType']);
             }
-            if (isset($filter['property_status'])) {
+
+            if (isset($filter['property_status']) && !empty($filter['property_status'])) {
                 $query->whereIn('item_property_status.id', $filter['property_status']);
             }
-            if (isset($filter['property_type'])) {
+
+            if (isset($filter['property_type']) && !empty($filter['property_type'])) {
                 $query->whereIn('pm.property_type', $filter['property_type']);
             }
-            if (isset($filter['property_sub_type'])) {
+
+            if (isset($filter['property_sub_type']) && !empty($filter['property_sub_type'])) {
                 $query->whereIn('pm.property_sub_type', $filter['property_sub_type']);
             }
-            if (isset($filter['leaseDeed'])) {
+
+            if (isset($filter['leaseDeed']) && !empty($filter['leaseDeed'])) {
                 $query->whereIn('pld.type_of_lease', $filter['leaseDeed']);
+            }
+
+            // Note: section_id filter is already handled at the beginning
+            // Only apply if not already handled by user section filter
+            if (!empty($sectionCodes)) {
+                $query->whereIn('pm.section_code', $sectionCodes);
             }
         }
 
-        // For debugging, you can uncomment the line below to see the generated SQL
-        // Log::info($query->toSql() . ' and bindings' . json_encode($query->getBindings()));
-        // dd($query->toSql(), $query->getBindings());
-        // dd($query->count());
+        // Execute query based on parameters
         if ($export) {
             return $query->get();
         }
+
         if (!is_null($page) && !is_null($perpage)) {
             return [
                 'counter' => (clone $query)->count(),
                 'rows' => $query->offset(($page - 1) * $perpage)->limit($perpage)->get(),
             ];
         }
+
         return $query->paginate(50);
     }
+    // public function detailedReport($filter = [], $export = false, $perpage = null, $page = null)
+    // {
+    //     // Start building the query
+    //     $filterUserSections = false;
+    //     $userSectionIdList = [];
+    //     // if (!$export) {
+    //     $user = Auth::user();
+    //     //filter by section when section filter is in request or user has role section officer // added by nitin on 27 feb 2025
+    //     $filterUserSections = isset($filter['section_id']) ? true : $user->hasAnyRole('section-officer', 'deputy-lndo');
+    //     $userSectionIdList = isset($filter['section_id']) ? $filter['section_id'] : $user->sections->pluck('section_code')->toArray();
+    //     // }
+    //     // dd($filter['section_id'], $filterUserSections, $userSectionIdList);
+
+    //     $query = DB::table('property_masters as pm')
+    //         ->select(
+    //             'pm.id',
+    //             'pm.unique_propert_id',
+    //             'pm.old_propert_id',
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN NULL ELSE spd.child_prop_id END AS child_prop_id'),
+    //             'pm.property_type',
+    //             'pm.property_sub_type',
+    //             'pm.land_type',
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pm.status ELSE spd.property_status END AS property_status'),
+    //             /* 'pm.file_no', */
+    //             // 'sections.section_code as section',
+    //             'pm.section_code as section',
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pld.presently_known_as ELSE spd.presently_known_as END AS address'),
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pld.plot_area_in_sqm ELSE spd.area_in_sqm END AS area_in_sqm'),
+    //             'cld.lessees_name as current_lesse_name',
+    //             'pld.doe'
+    //         )
+    //         ->leftJoin('property_lease_details as pld', 'pm.id', '=', 'pld.property_master_id')
+    //         ->leftJoin('splited_property_details as spd', 'pm.id', '=', 'spd.property_master_id')
+    //         ->leftJoin(DB::raw('(select * from current_lessee_details where flat_id is null) as cld'), function ($join) {
+    //             $join->on('pm.id', '=', 'cld.property_master_id')
+    //                 ->where(function ($query) {
+    //                     $query->where(function ($query) {
+    //                         $query->whereNull('pm.is_joint_property')
+    //                             ->whereNull('cld.splited_property_detail_id');
+    //                     })->orWhere(function ($query) {
+    //                         $query->whereNotNull('pm.is_joint_property')
+    //                             ->whereColumn('spd.id', '=', 'cld.splited_property_detail_id');
+    //                     });
+    //                 });
+    //         });
+
+    //     // Join items table for property_type, property_sub_type, and property_status
+    //     $query->leftJoin('items as item_type', 'item_type.id', '=', 'pm.property_type')
+    //         ->leftJoin('items as latest_item_type', 'latest_item_type.id', '=', 'pld.property_type_at_present')
+    //         ->leftJoin('items as land_type_names', 'land_type_names.id', '=', 'pm.land_type')
+    //         ->leftJoin('items as item_sub_type', 'item_sub_type.id', '=', 'pm.property_sub_type')
+    //         ->leftJoin('items as latest_item_sub_type', 'latest_item_sub_type.id', '=', 'pld.property_sub_type_at_present')
+    //         ->leftJoin('items as item_property_status', function ($join) {
+    //             $join->on('item_property_status.id', '=', DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pm.status ELSE spd.property_status END'));
+    //         })
+    //         /* ->when($filterUserSections, function ($query) use ($userSectionIdList) {
+    //             return $query->join('property_section_mappings as psm', function ($join) use ($userSectionIdList) {
+    //                 $join->on('pm.new_colony_name', '=', 'psm.colony_id');
+    //                 $join->whereColumn('pm.property_type', 'psm.property_type');
+    //                 $join->whereColumn('pm.property_sub_type', 'psm.property_subtype');
+    //                 $join->whereIn('psm.section_id', $userSectionIdList);
+    //             });
+    //         }, function ($query) {
+    //             return $query->leftJoin('property_section_mappings as psm', function ($join) {
+    //                 $join->on('pm.new_colony_name', '=', 'psm.colony_id');
+    //                 $join->whereColumn('pm.property_type', 'psm.property_type');
+    //                 $join->whereColumn('pm.property_sub_type', 'psm.property_subtype');
+    //             });
+    //         })
+    //         ->leftJoin('sections', 'psm.section_id', 'sections.id')*/
+    //         /* ->when(!empty($userSectionIdList), function($que) use($userSectionIdList){
+    //             return $que->whereIn('pm.section_code',$userSectionIdList);
+    //         }) */
+    //         ;
+
+    //     // Select item names
+    //     $query->addSelect(
+    //         'item_type.item_name as propertyType',
+    //         'item_sub_type.item_name as propertySubtype',
+    //         'item_property_status.item_name as propertyStatus',
+    //         'land_type_names.item_name as landType',
+    //         'latest_item_type.item_name as latestPropertyType',
+    //         'latest_item_sub_type.item_name as latestPropertySubType',
+    //     );
+    //     if ($export || ($perpage && $page)) {
+    //         $query->addSelect(
+    //             'pm.unique_file_no',
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pld.plot_area ELSE spd.current_area END AS area'),
+    //             'oc.name as colony',
+    //             'pm.block_no as block',
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pm.plot_or_property_no ELSE spd.plot_flat_no END AS plot_no'),
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN pld.presently_known_as ELSE spd.presently_known_as END AS presently_known_as'),
+    //             'pld.doa as date_of_allotment',
+    //             'pld.doe as date_of_execution',
+    //             'pld.date_of_expiration',
+    //             DB::raw("CASE WHEN pld.is_land_use_changed = 1 THEN 'yes' ELSE 'no' END AS is_land_use_changed"),
+    //             DB::raw("CASE WHEN pmd.is_gr_revised_ever = 1 THEN 'yes' ELSE 'no' END AS rgr"),
+    //             'pld.start_date_of_gr',
+    //             'pld.first_rgr_due_on',
+    //             'pld.rgr_duration',
+    //             'pld.property_type_at_present',
+    //             'pld.property_sub_type_at_present',
+    //             'pid.last_inspection_ir_date',
+    //             'pid.last_demand_id',
+    //             'pid.last_demand_letter_date',
+    //             'pid.last_demand_amount',
+    //             'pid.last_amount_received',
+    //             'pid.last_amount_received_date',
+    //             'pid.total_dues',
+    //             'pcd.address as lessee_address',
+    //             'pcd.phone_no as lessee_phone',
+    //             'pcd.email as lessee_email',
+    //             'users.name as created_by',
+    //             'pm.created_at',
+    //             'pld.premium',
+    //             'pld.premium_in_paisa',
+    //             'pld.type_of_lease',
+    //             DB::raw('CASE WHEN pm.is_joint_property IS NULL THEN COALESCE(pld.present_ground_rent, pld.gr_in_re_rs) ELSE COALESCE(spd.present_ground_rent, pld.gr_in_re_rs) END AS ground_rent')
+    //         )
+    //             ->leftJoin('old_colonies as oc', 'pm.new_colony_name', '=', 'oc.id')
+    //             ->leftJoin('property_inspection_demand_details as pid', function ($join) {
+    //                 $join->on('pm.id', '=', 'pid.property_master_id')
+    //                     ->where(function ($query) {
+    //                         $query->where(function ($query) {
+    //                             $query->whereNull('pm.is_joint_property')
+    //                                 ->whereNull('pid.splited_property_detail_id');
+    //                         })->orWhere(function ($query) {
+    //                             $query->whereNotNull('pm.is_joint_property')
+    //                                 ->whereColumn('spd.id', '=', 'pid.splited_property_detail_id');
+    //                         });
+    //                     });
+    //             })
+    //             ->leftJoin('property_contact_details as pcd', function ($join) {
+    //                 $join->on('pm.id', '=', 'pcd.property_master_id')
+    //                     ->where(function ($query) {
+    //                         $query->where(function ($query) {
+    //                             $query->whereNull('pm.is_joint_property')
+    //                                 ->whereNull('pcd.splited_property_detail_id');
+    //                         })->orWhere(function ($query) {
+    //                             $query->whereNotNull('pm.is_joint_property')
+    //                                 ->whereColumn('spd.id', '=', 'pcd.splited_property_detail_id');
+    //                         });
+    //                     });
+    //             })
+    //             ->leftJoin('property_misc_details as pmd', function ($join) {
+    //                 $join->on('pm.id', '=', 'pmd.property_master_id')
+    //                     ->where(function ($query) {
+    //                         $query->where(function ($query) {
+    //                             $query->whereNull('pm.is_joint_property')
+    //                                 ->whereNull('pmd.splited_property_detail_id');
+    //                         })->orWhere(function ($query) {
+    //                             $query->whereNotNull('pm.is_joint_property')
+    //                                 ->whereColumn('spd.id', '=', 'pmd.splited_property_detail_id');
+    //                         });
+    //                     });
+    //             })
+    //             /* ->leftJoin('current_lessee_details as cld', function ($join) {
+    //                 $join->on('pm.id', '=', 'cld.property_master_id')
+    //                     ->where(function ($query) {
+    //                         $query->where(function ($query) {
+    //                             $query->whereNull('pm.is_joint_property')
+    //                                 ->whereNull('cld.splited_property_detail_id');
+    //                         })->orWhere(function ($query) {
+    //                             $query->whereNotNull('pm.is_joint_property')
+    //                                 ->whereColumn('spd.id', '=', 'cld.splited_property_detail_id');
+    //                         });
+    //                     });
+    //             }) */
+    //             ->leftJoin('users', 'pm.created_by', '=', 'users.id');
+
+    //         // Join items for land_type, lease_type, present property type and subtype
+    //         $query->leftJoin('items as lease_type_names', 'lease_type_names.id', '=', 'pld.type_of_lease')
+    //             ->leftJoin('items as item_present_type_names', 'item_present_type_names.id', '=', 'pld.property_type_at_present')
+    //             ->leftJoin('items as item_present_sub_type_names', 'item_present_sub_type_names.id', '=', 'pld.property_sub_type_at_present');
+
+    //         // Add item names to select
+    //         $query->addSelect(
+    //             'lease_type_names.item_name as leaseDeed',
+    //             'item_present_type_names.item_name as presentPropertyType',
+    //             'item_present_sub_type_names.item_name as presentPropertySubtype'
+    //         );
+    //     }
+
+
+    //     // Apply filters
+    //     if (!empty($filter)) {
+    //         if (isset($filter['colony'])) {
+    //             $query->whereIn('pm.new_colony_name', $filter['colony']);
+    //         }
+    //         if (isset($filter['landType']) && $filter['landType'] != "") {
+    //             $query->where('pm.land_type', $filter['landType']);
+    //         }
+    //         if (isset($filter['property_status'])) {
+    //             $query->whereIn('item_property_status.id', $filter['property_status']);
+    //         }
+    //         if (isset($filter['property_type'])) {
+    //             $query->whereIn('pm.property_type', $filter['property_type']);
+    //         }
+    //         if (isset($filter['property_sub_type'])) {
+    //             $query->whereIn('pm.property_sub_type', $filter['property_sub_type']);
+    //         }
+    //         if (isset($filter['leaseDeed'])) {
+    //             $query->whereIn('pld.type_of_lease', $filter['leaseDeed']);
+    //         }
+    //     }
+
+    //     // For debugging, you can uncomment the line below to see the generated SQL
+    //     // Log::info($query->toSql() . ' and bindings' . json_encode($query->getBindings()));
+    //     // dd($query->toSql(), $query->getBindings());
+    //     // dd($query->count());
+    //     if ($export) {
+    //         return $query->get();
+    //     }
+    //     if (!is_null($page) && !is_null($perpage)) {
+    //         return [
+    //             'counter' => (clone $query)->count(),
+    //             'rows' => $query->offset(($page - 1) * $perpage)->limit($perpage)->get(),
+    //         ];
+    //     }
+    //     return $query->paginate(50);
+    // }
 
     public function sectionwisePropertyCount($export, $page = 1)
     {

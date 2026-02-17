@@ -1056,7 +1056,7 @@
     <script>
         function handleApplicationAction(action, applicationNo, button, remark = null) {
 
-            var needToconfirm = ((action == 'OBJECT' || action == 'HOLD' || action == 'REJECT_APP') && remark == null);
+            var needToconfirm = ((action == 'RECOMMENDED' || action == 'OBJECT' || action == 'HOLD' || action == 'REJECT_APP') && remark == null);
             if (!needToconfirm) {
                 let allChecked = true;
                 $('.required-for-approve').each(function() {
@@ -1111,6 +1111,7 @@
 
             } else {
                 let allChecked = true;
+                if (action != 'OBJECT') {
                 $('.required-for-approve').each(function() {
                     const $checkbox = $(this);
                     const $errorMsg = $checkbox.siblings('.required-error-message');
@@ -1121,6 +1122,7 @@
                         $errorMsg.hide();
                     }
                 });
+                }
 
                 if (allChecked) {
 
@@ -1169,6 +1171,7 @@
 
         function storeApplicationAction(action, applicationNo, button, remark) {
             let allChecked = true;
+            if (action != 'OBJECT') {
             $('.required-for-approve').each(function() {
                 const $checkbox = $(this);
                 const $errorMsg = $checkbox.siblings('.required-error-message');
@@ -1179,6 +1182,7 @@
                     $errorMsg.hide();
                 }
             });
+            }
 
             if (allChecked) {
                 /** code modified by Nitin as we need to disable everything once user click a button  - 13 Dec 2024*/

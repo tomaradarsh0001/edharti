@@ -120,7 +120,7 @@
 
         th,
         td {
-            border: 1px solid #ccc;
+            border: 1px solid #9c9c9c;
             padding:5px 8px;
             text-align: left;
             font-size: 12px;

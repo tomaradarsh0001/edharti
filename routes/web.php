@@ -185,6 +185,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/cancel-request-file', [RecordController::class, 'cancelRequestFile'])->name('recordRoom.cancelRequestFile');
         Route::get('/edit-record-file/{id}', [RecordController::class, 'editRecordFile'])->name('recordRoom.editRecordFile');
         Route::post('/update-record-file', [RecordController::class, 'updateRecordFile'])->name('recordRoom.edit');
+        Route::get('/record-room/export/csv', [RecordController::class, 'exportCsv'])
+            ->name('recordRoom.export.csv');
+
+        Route::get('/record-room/export/excel', [RecordController::class, 'exportExcel'])
+            ->name('recordRoom.export.excel');
+
     });
 
     //uploaded on live - SOURAV CHAUHAN - 16/Jan/2024 ****************** START *************************
@@ -373,6 +379,9 @@ Route::get('vacant/land/{id}/edit', [PropertyOutSideController::class, 'edit'])-
    Route::get('admin/applications/disposed', [AdminApplicationController::class, 'applicationsDisposed'])->name('applications.disposed');
    Route::get('getApplicationsDisposed', [AdminApplicationController::class, 'getApplicationsDisposed'])->name('get.applications.disposed');
     //route added by nitin for technical users
+
+    Route::get('application/remove', [AdminApplicationController::class, 'removeApplication'])->name('remove.application')->middleware('permission:remove.application.or.registration');
+    Route::post('application/remove/action', [AdminApplicationController::class, 'removeApplicationAction'])->name('remove.application.action');
 
     Route::get('admin/applicationsAssignedToUser/{onlyCurrentApplicatinos?}', [AdminApplicationController::class, 'applicationsAssignedToUser'])->name('admin.applicationsAssignedToUser')->middleware('permission:view.applications');
 

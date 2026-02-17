@@ -5,12 +5,23 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\PropertyScannedRequest;
 use Illuminate\Support\Facades\DB;
+use App\Exports\ScanningRequestsExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PropertyScannedRequestController extends Controller
 {
-    public function index()
+     public function index()
     {
-        return view('property_scanning.request-index');
+        // Same logic as PropertyScannedFileController@index()
+        $sections = getRequiredSections();
+
+        // Limit to user-assigned sections if role is section-officer / deputy-lndo
+        [$filterUserSections, $userSectionIds] = getUserAssignedSections();
+        if ($filterUserSections) {
+            $sections = $sections->whereIn('id', $userSectionIds);
+        }
+
+        return view('property_scanning.request-index', compact('sections'));
     }
 
     public function getScannedRequests(Request $request)
@@ -24,6 +35,7 @@ class PropertyScannedRequestController extends Controller
         $user = auth()->user();
         $userRole = $user->getRoleNames()->first();
         $sendToScanItemId = DB::table('items')->where('item_code', 'SEND_TO_SCAN')->value('id');
+        $scanNewItemId    = DB::table('items')->where('item_code', 'SCAN_NEW')->value('id');
 
         $query = PropertyScannedRequest::with([
                         'flat',
@@ -48,6 +60,27 @@ class PropertyScannedRequestController extends Controller
     if ($userRole === 'scan-admin' && $sendToScanItemId) {
         $query->where('property_scanned_requests.status', $sendToScanItemId);
     }
+
+    // Optional UI filter by status code (item_code)
+    if ($request->filled('status_code')) {
+        $query->where('status_items.item_code', $request->input('status_code'));
+    }
+
+    // Default restriction for section-officer / deputy-lndo: show only their assigned sections
+    if (in_array($userRole, ['section-officer', 'deputy-lndo'], true)) {
+        $sectionCodes = $user->sections->pluck('section_code')->filter()->values();
+        if ($sectionCodes->isNotEmpty()) {
+            $query->whereIn('property_masters.section_code', $sectionCodes);
+        } else {
+            // If no sections assigned, return empty result
+            $query->whereRaw('1=0');
+        }
+    }
+
+    if ($request->filled('section_code')) {
+        $query->where('property_masters.section_code', $request->input('section_code'));
+    }
+
 
         // if (in_array($userRole, ['section-officer', 'deputy-lndo'])) {
         //     $sectionCodes = $user->sections->pluck('section_code');
@@ -86,7 +119,7 @@ class PropertyScannedRequestController extends Controller
         $dir = strtolower($request->input('order.0.dir', 'desc')) === 'asc' ? 'asc' : 'desc';
 
         // Allow sorting only for: 0(S.No), 1(Request Date), 10(Section)
-        if (!in_array($orderIndex, [0, 1, 10], true)) {
+        if (!in_array($orderIndex, [0, 1, 7], true)) {
             $orderIndex = 1;
         }
 
@@ -94,7 +127,7 @@ class PropertyScannedRequestController extends Controller
         $orderMap = [
             0  => 'property_scanned_requests.created_at',  // S.No sorts by Request Date actually
             1  => 'property_scanned_requests.created_at',  // Request Date ✅
-            10 => 'property_masters.section_code',         // Section ✅
+            7 => 'property_masters.section_code',         // Section ✅
         ];
 
         $orderBy = $orderMap[$orderIndex] ?? 'property_scanned_requests.created_at';
@@ -149,11 +182,11 @@ class PropertyScannedRequestController extends Controller
                         'id' => $latest->id,
                         'request_date' => optional($latest->created_at)->format('d-m-Y'),
                         'old_property_id' => $latest->old_property_id,
-                        'plot_or_flat' => $blockPlotMerged,
-                        'colony_name' => $colonyName,
+                        // 'plot_or_flat' => $blockPlotMerged,
+                        // 'colony_name' => $colonyName,
                         'file_no' => $fileNo,
                         'record_file_location' => $recordFileLocation,
-                        'property_status' => $propertyStatus,
+                        // 'property_status' => $propertyStatus,
                         'status' => $status, // item_name
                         'status_code' => $latest->request_status_code ?? null, // item_code
                         'reason' => $reason,
@@ -220,29 +253,29 @@ class PropertyScannedRequestController extends Controller
         ]);
     }
 
-    public function returnToRecord(Request $request)
-    {
-        $request->validate(['id' => 'required|exists:property_scanned_requests,id']);
+    // public function returnToRecord(Request $request)
+    // {
+    //     $request->validate(['id' => 'required|exists:property_scanned_requests,id']);
 
-        $returnToRecordId = DB::table('items')->where('item_code', 'RETURNED_TO_RECORD')->value('id');
+    //     $returnToRecordId = DB::table('items')->where('item_code', 'RETURNED_TO_RECORD')->value('id');
 
-        if (!$returnToRecordId) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Status RETURNED_TO_RECORD missing in items table',
-            ], 404);
-        }
+    //     if (!$returnToRecordId) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Status RETURNED_TO_RECORD missing in items table',
+    //         ], 404);
+    //     }
 
-        $record = PropertyScannedRequest::findOrFail($request->id);
+    //     $record = PropertyScannedRequest::findOrFail($request->id);
 
-        $record->status = $returnToRecordId;
-        $record->save();
+    //     $record->status = $returnToRecordId;
+    //     $record->save();
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Request returned to record successfully.',
-        ]);
-    }
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'message' => 'Request returned to record successfully.',
+    //     ]);
+    // }
 
     public function deleteRequest(Request $request)
     {
@@ -388,18 +421,14 @@ class PropertyScannedRequestController extends Controller
 
     return response()->stream($callback, 200, $headers);
 }
-
 public function exportExcel(Request $request)
 {
-    // Quick "Excel" (CSV content with .xls extension)
-    $response = $this->exportCsv($request);
-    $filename = 'scanning_requests_' . now()->format('Ymd_His') . '.xls';
-
-    return $response->withHeaders([
-        'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
-        'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-    ]);
+    return Excel::download(
+        new ScanningRequestsExport(auth()->user(), $request),
+        'scanning_requests_' . now()->format('Ymd_His') . '.xlsx'
+    );
 }
+
 
 
 

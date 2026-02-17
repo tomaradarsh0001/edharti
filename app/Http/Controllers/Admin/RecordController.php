@@ -14,6 +14,8 @@ use Yajra\DataTables\Facades\DataTables;
 use Carbon\Carbon;
 use App\Helpers\GeneralFunctions;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Exports\RecordRoomFilesExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class RecordController extends Controller
 {
@@ -21,8 +23,45 @@ class RecordController extends Controller
     public function index(ColonyService $colonyService)
     {
         $colonyList = $colonyService->getColonyList();
-        return view('admin.record.index',compact(['colonyList']));
+
+        // Same pattern as scanning
+        $sections = getRequiredSections();
+        // dd($sections);
+
+        // 🔹 Apply user-assigned section filter ONLY if user is NOT record-room
+        if (!auth()->user()->hasRole('record-room')) {
+
+            // Limit to user-assigned sections if role is section-officer / deputy-lndo
+            [$filterUserSections, $userSectionIds] = getUserAssignedSections();
+
+            if ($filterUserSections) {
+                $sections = $sections->whereIn('id', $userSectionIds);
+            }
+            // dd($sections);
+        }
+
+        // 🔹 Show only sections that actually exist in record_room_files
+        $availableSectionCodes = RecordRoomFile::query()
+            ->whereNotNull('section_code')
+            ->pluck('section_code')
+            ->map(function ($code) {
+                $code = trim((string) $code);
+                $code = strtoupper($code); // optional but recommended if your codes are uppercase
+                return $code;
+            })
+            ->filter(function ($code) {
+                return $code !== '' && $code !== 'SECTION_CODE'; // remove garbage
+            })
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $sections = $sections->whereIn('section_code', $availableSectionCodes);
+
+
+        return view('admin.record.index', compact('colonyList', 'sections'));
     }
+
 
 
      public function getRecordRoomFilesData(Request $request)
@@ -35,7 +74,7 @@ class RecordController extends Controller
         ->leftJoin('old_colonies', 'old_colonies.code', '=', 'record_room_files.colony_code')
         ->select(
             'record_room_files.id',
-            'record_room_files.record_id',
+            'record_room_files.old_property_id',
             'record_room_files.colony_code',
             'old_colonies.name as colony_name',   
             'record_room_files.colony_id',
@@ -60,6 +99,9 @@ class RecordController extends Controller
             $data->where('record_room_files.plot', $request->plot_record);
         }
 
+         if ($request->filled('section_code')) {
+            $data->where('record_room_files.section_code', $request->section_code);
+        }
         return DataTables::of($data)
             ->editColumn('colony_code', function ($row) {
                     return $row->colony_name ?? $row->colony_code;
@@ -134,7 +176,8 @@ class RecordController extends Controller
             'filePlace' => 'required',
             'sectionName' => 'required',
         ]);
-        $colonyCode = OldColony::find($request->localityRecord)->pluck('code')->first();
+        // $colonyCode = OldColony::find($request->localityRecord)->pluck('code')->first();
+        $colonyCode = OldColony::where('id', $request->localityRecord)->value('code');
         RecordRoomFile::create([
             'colony_id' => $request->localityRecord,
             'colony_code' => $colonyCode,
@@ -169,10 +212,10 @@ class RecordController extends Controller
             ->select(
             'file_requests.id',
             'file_requests.status',
-            'file_requests.record_room_file_id',
+            'record_room_files.old_property_id',
             'file_requests.request_section',
             'file_requests.date_of_request',
-            'file_requests.current_section',
+            // 'file_requests.current_section',
             'file_requests.request_remark',
             'file_requests.created_by',
             'file_requests.requisition_file',
@@ -568,4 +611,137 @@ class RecordController extends Controller
 
         return $pdf->download($filename);
     }
+
+     public function exportCsv(Request $request)
+{
+    $sections = getLoggedInUserSections();
+
+    $query = RecordRoomFile::query()
+        ->leftJoin('old_colonies', 'old_colonies.code', '=', 'record_room_files.colony_code')
+        ->select([
+            'record_room_files.old_property_id',
+            'record_room_files.record_id',
+            'old_colonies.name as colony_name',
+            'record_room_files.block',
+            'record_room_files.plot',
+            'record_room_files.file_location',
+            'record_room_files.section_code',
+            'record_room_files.transaction_section_code',
+        ]);
+
+    // ✅ section restriction (same as listing)
+    $sectionCodes = Section::whereIn('id', $sections)->pluck('section_code')->toArray();
+    if (!empty($sectionCodes) && $sectionCodes[0] !== "REC") {
+        $query->whereIn('record_room_files.section_code', $sectionCodes);
+    }
+
+    // ✅ dropdown filters (same as listing)
+    if ($request->filled('locality_record')) {
+        $query->where('record_room_files.colony_id', $request->locality_record);
+    }
+    if ($request->filled('block_record')) {
+        $query->where('record_room_files.block', $request->block_record);
+    }
+    if ($request->filled('plot_record')) {
+        $query->where('record_room_files.plot', $request->plot_record);
+    }
+    if ($request->filled('section_code')) {
+        $query->where('record_room_files.section_code', $request->section_code);
+    }
+
+    // ✅ global search (DataTables style: search[value])
+    $search = $request->input('search.value');
+    if ($search === null) $search = $request->input('search');
+    if (is_array($search)) $search = $search['value'] ?? '';
+    $search = trim((string) $search);
+
+    if ($search !== '') {
+        $query->where(function ($q) use ($search) {
+            $q->where('record_room_files.old_property_id', 'like', "%{$search}%")
+              ->orWhere('old_colonies.name', 'like', "%{$search}%")
+              ->orWhere('record_room_files.block', 'like', "%{$search}%")
+              ->orWhere('record_room_files.plot', 'like', "%{$search}%")
+              ->orWhere('record_room_files.file_location', 'like', "%{$search}%")
+              ->orWhere('record_room_files.section_code', 'like', "%{$search}%")
+              ->orWhere('record_room_files.transaction_section_code', 'like', "%{$search}%");
+        });
+    }
+
+    // ✅ ordering (match your record-list DataTable column indexes)
+    // 0 DT_RowIndex (S.No), 1 record_id, 2 colony_name, 3 block, 4 plot, 5 file_location, 6 section_code, 7 transaction_section_code
+    $orderColumnIndex = (int) $request->input('order.0.column', 1);
+    $orderDir = strtolower($request->input('order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+    $orderMap = [
+        0 => 'record_room_files.id',                     // S.No -> sort by ID
+        1 => 'record_room_files.old_property_id',
+        2 => 'old_colonies.name',
+        3 => 'record_room_files.block',
+        4 => 'record_room_files.plot',
+        5 => 'record_room_files.file_location',
+        6 => 'record_room_files.section_code',
+        7 => 'record_room_files.transaction_section_code',
+    ];
+
+    $orderBy = $orderMap[$orderColumnIndex] ?? 'record_room_files.id';
+    $query->orderBy($orderBy, $orderDir);
+
+    // ✅ Fetch all rows (export ignores pagination)
+    $rows = $query->get();
+
+    $filename = 'record_room_files_' . now()->format('Ymd_His') . '.csv';
+
+    $headers = [
+        'Content-Type' => 'text/csv; charset=UTF-8',
+        'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+    ];
+
+    $callback = function () use ($rows) {
+        $out = fopen('php://output', 'w');
+
+        // Excel-friendly UTF-8 BOM
+        fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
+
+        // ✅ Header with S.No.
+        fputcsv($out, [
+            'S.No.',
+            'Property ID',
+            'Colony Name',
+            'Block',
+            'Plot',
+            'File Location',
+            'Section',
+            'Current Section',
+        ]);
+
+        $i = 1;
+        foreach ($rows as $r) {
+            fputcsv($out, [
+                $i++,                                
+                $r->old_property_id ?? '-',
+                $r->colony_name ?? '-',
+                $r->block ?? '-',
+                $r->plot ?? '-',
+                $r->file_location ?? '-',
+                $r->section_code ?? '-',
+                $r->transaction_section_code ?? '-',
+            ]);
+        }
+
+        fclose($out);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
+
+public function exportExcel(Request $request)
+{
+    return Excel::download(
+        new RecordRoomFilesExport(auth()->user(), $request),
+        'record_room_files_' . now()->format('Ymd_His') . '.xlsx'
+    );
+}
+
+
+
 }

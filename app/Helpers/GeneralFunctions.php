@@ -55,6 +55,24 @@ use App\Models\PropertyScannedRequest;
 use App\Models\SplitedPropertyDetail;
 use App\Models\PropertyScannedFile;
 use ZipArchive;
+use App\Models\{
+    // Payment,
+    PaymentDetail,
+    // Demand,
+    DemandDetail,
+    // Document,
+    // DocumentKey,
+    DocumentChecklist,
+    // Coapplicant,
+    AppLatestAction,
+    ApplicationStatus,
+    ConversionApplicationHistory,
+    DeedOfApartmentApplicationHistory,
+    LandUseChangeApplicationHistory,
+    MutationApplicationHistory,
+    NocApplicationHistory,
+    // ApplicationMovement
+};
 
 class GeneralFunctions
 {
@@ -1268,5 +1286,545 @@ class GeneralFunctions
             "{$oldPropertyId}_scanned_files",
             'public'
         );
+    }
+
+    /**
+     * Delete application and all related data
+     */
+    public static function deleteApplicationData($application, $modelName, $modelId)
+    {
+        // Common deletion logic for all application types
+        self::deleteCommonRelatedData($application->application_no, $modelId);
+
+        // Application type specific deletion
+        switch ($modelName) {
+            case 'MutationApplication':
+                return self::deleteMutationApplication($application, $modelId);
+
+            case 'LandUseChangeApplication':
+                return self::deleteLandUseChangeApplication($application, $modelId);
+
+            case 'DeedOfApartmentApplication':
+                return self::deleteDeedOfApartmentApplication($application, $modelId);
+
+            case 'ConversionApplication':
+                return self::deleteConversionApplication($application, $modelId);
+
+            case 'NocApplication':
+                return self::deleteNocApplication($application, $modelId);
+
+            default:
+                throw new \Exception("Unknown application type: {$modelName}");
+        }
+    }
+
+    /**
+     * Delete common related data for all application types
+     */
+    private static function deleteCommonRelatedData($applicationNumber, $modelId)
+    {
+        // Delete application status records
+        ApplicationStatus::where('reg_app_no', $applicationNumber)
+            ->where('model_id', $modelId)
+            ->delete();
+
+        // Delete application movement records
+        ApplicationMovement::where('application_no', $applicationNumber)
+            ->where('model_id', $modelId)
+            ->delete();
+
+        // Delete latest action records
+        AppLatestAction::where('application_no', $applicationNumber)->delete();
+    }
+
+    /**
+     * Delete payment related data
+     */
+    private static function deletePaymentData($applicationNumber)
+    {
+        $payment = Payment::where('application_no', $applicationNumber)->first();
+
+        if ($payment) {
+            // Delete payment details
+            PaymentDetail::where('payment_id', $payment->id)->delete();
+
+            // Delete demands and demand details
+            $paymentDetails = PaymentDetail::where('payment_id', $payment->id)->get();
+            foreach ($paymentDetails as $paymentDetail) {
+                DemandDetail::where('demand_id', $paymentDetail->demand_id)->delete();
+                Demand::where('id', $paymentDetail->demand_id)->delete();
+            }
+
+            // Delete payment
+            $payment->delete();
+        }
+    }
+
+    /**
+     * Delete document related data
+     */
+    private static function deleteDocumentData($modelId, $modelName)
+    {
+        // Get all document records
+        $documents = Document::where('model_id', $modelId)
+            ->where('model_name', $modelName)
+            ->get();
+
+        if ($documents->isNotEmpty()) {
+            // Delete physical files from storage
+            foreach ($documents as $document) {
+                // Check if file_path exists and delete the file
+                if ($document->file_path && Storage::exists($document->file_path)) {
+                    Storage::delete($document->file_path);
+                }
+            }
+
+            // Get document IDs for related table deletions
+            $documentIds = $documents->pluck('id');
+
+            // Delete related data using the document IDs
+            DocumentKey::whereIn('document_id', $documentIds)->delete();
+            DocumentChecklist::whereIn('document_id', $documentIds)->delete();
+
+            // Delete all documents for this model
+            Document::where('model_id', $modelId)
+                ->where('model_name', $modelName)
+                ->delete();
+        }
+    }
+
+    /**
+     * Delete co-applicants
+     */
+    private static function deleteCoapplicants($modelId, $modelName)
+    {
+        // Get all coapplicants for this model
+        $coapplicants = Coapplicant::where('model_id', $modelId)
+            ->where('model_name', $modelName)
+            ->get();
+
+        foreach ($coapplicants as $coapplicant) {
+            // Delete aadhaar file if exists
+            if ($coapplicant->aadhaar_file_path && Storage::exists($coapplicant->aadhaar_file_path)) {
+                Storage::delete($coapplicant->aadhaar_file_path);
+            }
+
+            // Delete pan file if exists
+            if ($coapplicant->pan_file_path && Storage::exists($coapplicant->pan_file_path)) {
+                Storage::delete($coapplicant->pan_file_path);
+            }
+
+            // Delete image file if exists
+            if ($coapplicant->image_path && Storage::exists($coapplicant->image_path)) {
+                Storage::delete($coapplicant->image_path);
+            }
+
+            // Delete the coapplicant directory if empty
+            $directoryPath = dirname($coapplicant->aadhaar_file_path ??
+                $coapplicant->pan_file_path ??
+                $coapplicant->image_path ?? '');
+
+            if ($directoryPath && $directoryPath !== '.' && Storage::exists($directoryPath)) {
+                // Check if directory is empty
+                if (
+                    count(Storage::files($directoryPath)) === 0 &&
+                    count(Storage::directories($directoryPath)) === 0
+                ) {
+                    Storage::deleteDirectory($directoryPath);
+                }
+            }
+        }
+
+        // Finally delete the coapplicant records from database
+        Coapplicant::where('model_id', $modelId)
+            ->where('model_name', $modelName)
+            ->delete();
+    }
+
+
+    /**
+     * Delete Mutation Application
+     */
+    private static function deleteMutationApplication($application, $modelId)
+    {
+        $modelName = 'MutationApplication';
+
+        // Delete payment data
+        self::deletePaymentData($application->application_no);
+
+        // Delete document data
+        self::deleteDocumentData($modelId, $modelName);
+
+        // Delete co-applicants
+        self::deleteCoapplicants($modelId, $modelName);
+
+        // Delete mutation application history specific data
+        MutationApplicationHistory::where('application_no', $application->application_no)->delete();
+
+        // Delete mutation application specific data
+        MutationApplication::where('application_no', $application->application_no)->delete();
+
+        return "Mutation Application deleted successfully";
+    }
+
+    /**
+     * Delete Land Use Change Application
+     */
+    private static function deleteLandUseChangeApplication($application, $modelId)
+    {
+        $modelName = 'LandUseChangeApplication';
+
+        // Delete payment data
+        self::deletePaymentData($application->application_no);
+
+        // Delete document data
+        self::deleteDocumentData($modelId, $modelName);
+
+        // Delete co-applicants
+        self::deleteCoapplicants($modelId, $modelName);
+
+        // Delete land use change application history specific data
+        LandUseChangeApplicationHistory::where('application_no', $application->application_no)->delete();
+
+        // Delete land use change application specific data
+        LandUseChangeApplication::where('application_no', $application->application_no)->delete();
+
+        // Add any other LandUseChangeApplication specific deletions here
+
+        return "Land Use Change Application deleted successfully";
+    }
+
+    /**
+     * Delete Deed of Apartment Application
+     */
+    private static function deleteDeedOfApartmentApplication($application, $modelId)
+    {
+        $modelName = 'DeedOfApartmentApplication';
+
+        // Delete payment data
+        self::deletePaymentData($application->application_no);
+
+        // Delete document data
+        self::deleteDocumentData($modelId, $modelName);
+
+        // Delete co-applicants
+        self::deleteCoapplicants($modelId, $modelName);
+
+        // Delete deed of apartment application history specific data
+        DeedOfApartmentApplicationHistory::where('application_no', $application->application_no)->delete();
+
+        // Delete deed of apartment application specific data
+        DeedOfApartmentApplication::where('application_no', $application->application_no)->delete();
+
+        return "Deed of Apartment Application deleted successfully";
+    }
+
+    /**
+     * Delete Conversion Application
+     */
+    private static function deleteConversionApplication($application, $modelId)
+    {
+        $modelName = 'ConversionApplication';
+
+        // Delete payment data
+        self::deletePaymentData($application->application_no);
+
+        // Delete document data
+        self::deleteDocumentData($modelId, $modelName);
+
+        // Delete co-applicants
+        self::deleteCoapplicants($modelId, $modelName);
+        // Delete conversion application history specific data
+        ConversionApplicationHistory::where('application_no', $application->application_no)->delete();
+        // Delete conversion application specific data
+        ConversionApplication::where('application_no', $application->application_no)->delete();
+
+        return "Conversion Application deleted successfully";
+    }
+
+    /**
+     * Delete NOC Application
+     */
+    private static function deleteNocApplication($application, $modelId)
+    {
+        $modelName = 'NocApplication';
+
+        // Delete payment data
+        self::deletePaymentData($application->application_no);
+
+        // Delete document data
+        self::deleteDocumentData($modelId, $modelName);
+
+        // Delete co-applicants
+        self::deleteCoapplicants($modelId, $modelName);
+
+        // Delete NOC application history specific data
+        NocApplicationHistory::where('application_no', $application->application_no)->delete();
+
+        // Delete NOC application specific data
+        NocApplication::where('application_no', $application->application_no)->delete();
+
+        return "NOC Application deleted successfully";
+    }
+
+    /**
+     * Extract prefix from application number
+     */
+    public static function extractPrefix($applicationNumber)
+    {
+        return strtoupper(substr(trim($applicationNumber), 0, 3));
+    }
+
+
+    /**
+     * Check if application exists
+     */
+    public static function findApplication($applicationNumber)
+    {
+        return Application::where('application_no', $applicationNumber)->first();
+    }
+
+    /**
+     * Check if application exists
+     */
+    public static function findRegistration($applicationNumber)
+    {
+        return UserRegistration::where('applicant_number', $applicationNumber)->first();
+    }
+
+    /**
+     * Check if application can be removed
+     */
+    public static function canRemoveApplication($application)
+    {
+        // Add other business logic checks here
+        if ($application->status == 1487) {
+            return [
+                'can_remove' => false,
+                'message' => 'Approved applications cannot be removed.'
+            ];
+        }
+
+        return [
+            'can_remove' => true,
+            'message' => ''
+        ];
+    }
+
+    /**
+     * Check if applicant can be delete
+     */
+    public static function isApplicantCanDeleteForApplications($application)
+    {
+        $isApplicantCanDelete = ApplicantUserDetail::where('user_id', $application->created_by)
+            ->value('is_applicant_can_delete');
+
+        if ($isApplicantCanDelete) {
+            return [
+                'can_remove' => true,
+                'message' => ''
+            ];
+        }
+
+        return [
+            'can_remove' => false,
+            'message' => 'Applicant cannot be deleted. The is_applicant_can_delete flag must be enabled to allow applicant deletion.'
+        ];
+    }
+
+    /**
+     * Check if applicant can be delete
+     */
+    public static function isApplicantCanDeleteForRegistraions($applicationNumber)
+    {
+        $isApplicantCanDelete = ApplicantUserDetail::where('applicant_number', $applicationNumber)
+            ->value('is_applicant_can_delete');
+
+        if ($isApplicantCanDelete) {
+            return [
+                'can_remove' => true,
+                'message' => ''
+            ];
+        }
+
+        return [
+            'can_remove' => false,
+            'message' => 'Applicant cannot be deleted. The is_applicant_can_delete flag must be enabled to allow applicant deletion.'
+        ];
+    }
+
+    /**
+     * Check if application can be removed
+     */
+    public static function canRemoveRegistration($registration)
+    {
+        // Add other business logic checks here
+        if ($registration->status == 1372) {
+            return [
+                'can_remove' => false,
+                'message' => 'Approved registration cannot be removed.'
+            ];
+        }
+
+        return [
+            'can_remove' => true,
+            'message' => ''
+        ];
+    }
+
+    public static function deleteRegistrationData($registration)
+    {
+        try {
+            // Find user with registration details
+            $user = User::where('mobile_no', $registration->mobile)
+                ->where('email', $registration->email)
+                ->withTrashed() // Include soft-deleted records if you want to permanently delete them too
+                ->first();
+
+            if (!$user) {
+                return "No user found for the given registration details.";
+            }
+
+            // Start transaction for data consistency
+            DB::beginTransaction();
+
+            // Cache service types once to avoid multiple function calls
+            $serviceTypes = self::getServiceTypesForDeletion();
+
+            // Delete related data in optimal order (child to parent)
+            self::deleteUserRelatedData($user, $registration, $serviceTypes);
+
+            // Finally delete the user
+            $user->forceDelete();
+
+            DB::commit();
+
+            // Log the deletion for audit trail
+            self::logRegistrationDeletion($user, $registration);
+
+            return "User registration deleted successfully";
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            // Log error with context
+            \Log::error('Failed to delete registration data', [
+                'registration_id' => $registration->id ?? 'N/A',
+                'applicant_number' => $registration->applicant_number ?? 'N/A',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return "Failed to delete registration data: " . $e->getMessage();
+        }
+    }
+
+    /**
+     * Cache and return service types needed for deletion
+     */
+    private static function getServiceTypesForDeletion()
+    {
+        return [
+            'registration' => getServiceType('RS_NEW_REG'),
+            'new_property' => getServiceType('RS_NEW_PRO')
+        ];
+    }
+
+    /**
+     * Delete all related data for a user
+     */
+    private static function deleteUserRelatedData($user, $registration, $serviceTypes)
+    {
+        $userId = $user->id;
+        $applicantNumber = $registration->applicant_number;
+
+        // 1. Delete from smallest tables first
+        // Delete ApplicantUserDetail records
+        ApplicantUserDetail::where('user_id', $userId)
+            ->where('applicant_number', $applicantNumber)
+            ->delete();
+
+        // 2. Delete documents by service type
+        self::deleteUserDocuments($userId, $serviceTypes);
+
+        // 3. Delete application movements
+        ApplicationMovement::where('application_no', $applicantNumber)->delete();
+
+        // 4. Delete user properties
+        UserProperty::where('user_id', $userId)->forceDelete();
+    }
+
+    /**
+     * Delete user documents for specific service types
+     */
+    private static function deleteUserDocuments($userId, $serviceTypes)
+    {
+        // Delete registration documents
+        if (!empty($serviceTypes['registration'])) {
+            $documents = Document::where('service_Type', $serviceTypes['registration'])
+                ->where('user_id', $userId)
+                ->where('model_name', 'User')
+                ->get();
+
+            // Delete files
+            foreach ($documents as $document) {
+                if ($document->file_path && Storage::exists($document->file_path)) {
+                    Storage::delete($document->file_path);
+                }
+            }
+
+            // Delete database records
+            Document::where('service_Type', $serviceTypes['registration'])
+                ->where('user_id', $userId)
+                ->where('model_name', 'User')
+                ->delete();
+        }
+
+        // Delete newly added property documents
+        if (!empty($serviceTypes['new_property'])) {
+            $documents = Document::where('service_Type', $serviceTypes['new_property'])
+                ->where('user_id', $userId)
+                ->where('model_name', 'NewlyAddedProperty')
+                ->get();
+
+            // Delete files
+            foreach ($documents as $document) {
+                if ($document->file_path && Storage::exists($document->file_path)) {
+                    Storage::delete($document->file_path);
+                }
+            }
+
+            // Delete database records
+            Document::where('service_Type', $serviceTypes['new_property'])
+                ->where('user_id', $userId)
+                ->where('model_name', 'NewlyAddedProperty')
+                ->delete();
+        }
+
+        // Optional: Delete any other documents for this user
+        // Uncomment if you want to delete all user documents:
+        /*
+            $allUserDocuments = Document::where('user_id', $userId)->get();
+            foreach ($allUserDocuments as $document) {
+                if ($document->file_path && Storage::exists($document->file_path)) {
+                    Storage::delete($document->file_path);
+                }
+            }
+            Document::where('user_id', $userId)->delete();
+            */
+    }
+
+    /**
+     * Log deletion for audit trail
+     */
+    private static function logRegistrationDeletion($user, $registration)
+    {
+        \Log::info('Registration deleted successfully', [
+            'user_id' => $user->id,
+            'applicant_number' => $registration->applicant_number,
+            'mobile' => $user->mobile_no,
+            'email' => $user->email,
+            'deleted_by' => auth()->user() ? auth()->user()->id : 'System',
+            'deleted_at' => now()->toDateTimeString()
+        ]);
     }
 }

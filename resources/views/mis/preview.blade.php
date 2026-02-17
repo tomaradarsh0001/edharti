@@ -58,6 +58,14 @@
             color: #ffffff !important;
 
         }
+        .mainPropertyDetail{
+            font-weight: 600;
+            font-size: 22px;
+            padding-bottom: 12px;
+            display: flex;
+            justify-content: center;
+            text-transform: uppercase;
+        }
     </style>
       <div class="page-breadcrumb d-none d-sm-flex align-items-center mb-3">
     <div class="breadcrumb-title pe-3">Properties
@@ -80,6 +88,72 @@
 
     <div class="card shadow-sm mb-4">
         <div class="card-body">
+
+
+            @if(isset($flatData['flatDetails']->flat_number))
+                    <!-- <h5 class="mb-4 pt-3 text-decoration-underline">FLAT DETAILS</h5> -->
+                    <div class="part-title">
+                        <h5>FLAT DETAILS</h5>
+                    </div>
+
+                    <div class="part-details">
+                        <div class="container-fluid">
+                        
+                            <table class="table table-bordered">
+                                <tbody>
+                                    <tr>
+                                        <td><b>Flat Id : </b>{{ $flatData['flatDetails']->unique_flat_id }}</td>
+                                        <td><b>Flat File No. : </b>{{ $flatData['flatDetails']->unique_file_no }}</td>
+                                        <td><b>Flat No : </b>{{ $flatData['flatDetails']->flat_number }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><b>Builder / Developer Name : </b>{{ $flatData['flatDetails']->builder_developer_name }}</td>
+                                        <td><b>Original Buyer Name : </b>{{ $flatData['flatDetails']->original_buyer_name }}</td>
+                                        <td><b>Purchase Date : </b>{{ \Carbon\Carbon::parse($flatData['flatDetails']->purchase_date)->format('m/d/Y') }}
+                                        </td>                                            </td>
+                                    </tr>
+                                    <tr>
+                                        <td><b>Present Occupent Name : </b>{{ $flatData['flatDetails']->present_occupant_name }}</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                            
+            @else
+                @if (!empty($flatData['flatDetails']['flat_number']))
+                <!-- <h5 class="mb-4 pt-3 text-decoration-underline">FLAT DETAILS</h5> -->
+                <div class="part-title">
+                    <h5>FLAT DETAILS</h5>
+                </div>
+
+                <div class="part-details">
+                    <div class="container-fluid">
+                        <table class="table table-bordered">
+                            <tbody>
+                                <tr>
+                                    <td><b>Flat Number : </b>{{ $flatData['flatDetails']['flat_number'] }}</td>
+                                    <td><b>No MIS Found For This Flat Property </b></td>
+                                    <td></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                @endif
+            @endif
+            @if(isset($flatData['flatDetails']->flat_number) || !empty($flatData['flatDetails']['flat_number']))
+            <div>
+                <hr>
+                <div class="mainPropertyDetail">
+                    Main Property Details
+                </div>
+            </div>
+            @endif
+
+
 
             <!-- <div class="container"> -->
                 <div class="part-title">
@@ -280,60 +354,8 @@
                 </div>
 
                
-                    @if(isset($flatData['flatDetails']->flat_number))
-                    <!-- <h5 class="mb-4 pt-3 text-decoration-underline">FLAT DETAILS</h5> -->
-                    <div class="part-title">
-                        <h5>FLAT DETAILS</h5>
-                    </div>
-
-                    <div class="part-details">
-                        <div class="container-fluid">
-                        
-                            <table class="table table-bordered">
-                                <tbody>
-                                    <tr>
-                                        <td><b>Flat Id : </b>{{ $flatData['flatDetails']->unique_flat_id }}</td>
-                                        <td><b>Flat File No. : </b>{{ $flatData['flatDetails']->unique_file_no }}</td>
-                                        <td><b>Flat No : </b>{{ $flatData['flatDetails']->flat_number }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><b>Builder / Developer Name : </b>{{ $flatData['flatDetails']->builder_developer_name }}</td>
-                                        <td><b>Original Buyer Name : </b>{{ $flatData['flatDetails']->original_buyer_name }}</td>
-                                        <td><b>Purchase Date : </b>{{ \Carbon\Carbon::parse($flatData['flatDetails']->purchase_date)->format('m/d/Y') }}
-                                        </td>                                            </td>
-                                    </tr>
-                                    <tr>
-                                        <td><b>Present Occupent Name : </b>{{ $flatData['flatDetails']->present_occupant_name }}</td>
-                                        <td></td>
-                                        <td></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                            
-                    @else
-                        @if (!empty($flatData['flatDetails']['flat_number']))
-                        <!-- <h5 class="mb-4 pt-3 text-decoration-underline">FLAT DETAILS</h5> -->
-                        <div class="part-title">
-                            <h5>FLAT DETAILS</h5>
-                        </div>
-
-                        <div class="part-details">
-                            <div class="container-fluid">
-                                <table class="table table-bordered">
-                                    <tbody>
-                                        <tr>
-                                            <td><b>Flat Number : </b>{{ $flatData['flatDetails']['flat_number'] }}</td>
-                                            <td><b>No MIS Found For This Flat Property </b></td>
-                                            <td></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                  
                                 
-                        @else
                             <!-- <h5 class="mb-4 pt-3 text-decoration-underline">PROPERTY STATUS DETAILS</h5> -->
                             <div class="part-title">
                                 <h5>PROPERTY STATUS DETAILS</h5>
@@ -531,8 +553,7 @@
                             </div>
                             
                                 
-                            @endif
-                    @endif
+                        
                 
                 @if ($roles === 'section-officer')            
                     @if ($isChecked == 1)

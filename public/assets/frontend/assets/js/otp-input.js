@@ -821,21 +821,21 @@ $(document).ready(function () {
         ($("#isPropertyFlat").is(":checked")
           ? [
             { id: "#localityFill", errorId: "#localityFillError" },
-            { id: "#blocknoInvFill", errorId: "#blocknoInvFillError" },
+            // { id: "#blocknoInvFill", errorId: "#blocknoInvFillError" },
             { id: "#plotnoInvFill", errorId: "#plotnoInvFillError" },
             { id: "#landUseInvFill", errorId: "#landUseInvFillError" },
             {
               id: "#landUseSubtypeInvFill",
               errorId: "#landUseSubtypeInvFillError",
             },
-            {
+            /* {
               id: "#flat_no_after_Checked_Address_notfound",
               errorId: "#flat_no_after_Checked_Address_notfoundError",
-            },
+            }, */
           ]
           : [
             { id: "#localityFill", errorId: "#localityFillError" },
-            { id: "#blocknoInvFill", errorId: "#blocknoInvFillError" },
+            // { id: "#blocknoInvFill", errorId: "#blocknoInvFillError" },
             { id: "#plotnoInvFill", errorId: "#plotnoInvFillError" },
             { id: "#landUseInvFill", errorId: "#landUseInvFillError" },
             {

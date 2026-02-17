@@ -68,14 +68,34 @@
                     <th>S.No</th>
                     <th>Request Date</th>
                     <th>Property ID</th>
-                    <th>Block/Plot/Flat</th>
-                    <th>Colony</th>
+                    <!-- <th>Block/Plot/Flat</th>
+                    <th>Colony</th> -->
                     <th>File No</th>
                     <th>Record File Location</th>
-                    <th>Property Status</th>
+                    <!-- <th>Property Status</th> -->
                     <th>Reason</th>
-                    <th>Request Status</th>
-                    <th>Section</th>
+                    <th>
+                        <select id="statusFilter" class="form-select form-select-sm">
+                            <option value="">Request Status</option>
+                            <!-- <option value="SCAN_NEW">New</option> -->
+                            @if(!auth()->user()->hasRole('scan-admin'))
+                                <option value="SCAN_NEW">New</option>
+                            @endif
+
+                            <option value="SEND_TO_SCAN">Send To Scan</option>
+                            <option value="SCAN_CLOSED">Closed</option>
+                        </select>
+                    </th>
+                    
+
+                    <th>
+                        <select id="sectionFilter" class="form-select form-select-sm">
+                            <option value="">Section</option> {{-- default: all allowed --}}
+                            @foreach($sections as $sec)
+                                <option value="{{ $sec->section_code }}">{{ $sec->section_code }}</option>
+                            @endforeach
+                        </select>
+                    </th>
                     <th>Action</th>
 
                 </tr>
@@ -88,26 +108,39 @@
 
 @include('include.alerts.scan-confirmation')
 @include('include.alerts.scan-close-confirmation')
-@include('include.alerts.return-record-confirmation')
+<!-- @include('include.alerts.return-record-confirmation') -->
 @include('include.alerts.scan-delete-request-confirmation')
 
 <script>
+        // Preselect status filter based on role
+    @if(auth()->user()->hasRole('scan-admin'))
+        $('#statusFilter').val('SEND_TO_SCAN');
+    @elseif(auth()->user()->hasRole('record_room') || auth()->user()->hasRole('record-room'))
+        $('#statusFilter').val('SCAN_NEW');
+    @endif
     $(document).ready(function () {
         $('#scannedRequestsTable').DataTable({
             processing: true,
             serverSide: true,
-            ajax: "{{ route('scanned.request.data') }}", 
+            ajax: {
+                        url: "{{ route('scanned.request.data') }}",
+                        data: function (d) {
+                            d.status_code = $('#statusFilter').val() || '';
+                            d.section_code = $('#sectionFilter').val() || '';
+                        }
+                    },
+
             columns: [
                 { data: null, render: function (data, type, row, meta) {
                     return meta.row + meta.settings._iDisplayStart + 1;
                 }},
                 { data: 'request_date' },
                 { data: 'old_property_id' },
-                { data: 'plot_or_flat' },
-                { data: 'colony_name' },
+                // { data: 'plot_or_flat' },
+                // { data: 'colony_name' },
                 { data: 'file_no' },
                 { data: 'record_file_location' },
-                { data: 'property_status' },
+                // { data: 'property_status' },
                 { data: 'reason' },
                 {
                     data: null,
@@ -131,15 +164,17 @@
                     data: null,
                     render: function (data, type, row, meta) {
                         let html = '';
-                        if (row.status_code === 'SCAN_NEW') {
-                            html += `<button class="btn btn-sm btn-primary send-to-scan-btn" data-id="${row.id}">Send to Scan</button> `;
-                        }
-
-                        @if(auth()->user()->getRoleNames()->first() !== 'scan-admin')
-                            if (row.status_code === 'RETURNED_TO_RECORD') {
-                                html += `<button class="btn btn-sm btn-danger close-scan-btn ms-1" data-id="${row.id}">Close Scan</button>`;
+                        @if(auth()->user()->getRoleNames()->first() === 'record-room')
+                            if (row.status_code === 'SCAN_NEW') {
+                                html += `<button class="btn btn-sm btn-primary send-to-scan-btn" data-id="${row.id}">Send to Scan</button> `;
                             }
                         @endif
+
+                        // @if(auth()->user()->getRoleNames()->first() !== 'scan-admin')
+                        //     if (row.status_code === 'RETURNED_TO_RECORD') {
+                        //         html += `<button class="btn btn-sm btn-danger close-scan-btn ms-1" data-id="${row.id}">Close Scan</button>`;
+                        //     }
+                        // @endif
 
 
 
@@ -149,11 +184,11 @@
                                 : '';
                         @endif
 
-                        @if(auth()->user()->getRoleNames()->first() === 'scan-admin')
-                            if (row.status_code === 'SEND_TO_SCAN' && row.has_scanned_files) {
-                                html += `<button class="btn btn-sm btn-warning ms-1 return-to-record-btn" data-id="${row.id}">Return to Record</button>`;
-                            }
-                        @endif
+                        // @if(auth()->user()->getRoleNames()->first() === 'scan-admin')
+                        //     if (row.status_code === 'SEND_TO_SCAN' && row.has_scanned_files) {
+                        //         html += `<button class="btn btn-sm btn-warning ms-1 return-to-record-btn" data-id="${row.id}">Return to Record</button>`;
+                        //     }
+                        // @endif
 
                         @if(auth()->user()->getRoleNames()->first() === 'super-admin')
                             if (row.status_code !== 'SCAN_CLOSED') {
@@ -176,7 +211,7 @@
             ],
             columnDefs: [
                     { targets: '_all', orderable: false },
-                    { targets: [0, 1, 10], orderable: true } // only these show sort icons
+                    { targets: [0, 1, 7], orderable: true } // only these show sort icons
                 ],
             order: [[1, 'desc']],
             scrollX: true,
@@ -207,6 +242,13 @@
 
             dom: '<"top"Blf>rt<"bottom"ip><"clear">'
         });
+    });
+    $(document).on('change', '#statusFilter', function () {
+        $('#scannedRequestsTable').DataTable().ajax.reload();
+    });
+
+    $(document).on('change', '#sectionFilter', function () {
+        $('#scannedRequestsTable').DataTable().ajax.reload();
     });
     let selectedRequestId = null;
 
@@ -295,48 +337,48 @@ $('.confirm-close-scan').on('click', function () {
     });
 });
 
-let selectedReturnId = null;
+// let selectedReturnId = null;
 
-$(document).on('click', '.return-to-record-btn', function () {
-    selectedReturnId = $(this).data('id');
-    $('#returnToRecordModal').modal('show');
-});
+// $(document).on('click', '.return-to-record-btn', function () {
+//     selectedReturnId = $(this).data('id');
+//     $('#returnToRecordModal').modal('show');
+// });
 
-$('.confirm-return-to-record').on('click', function () {
-    if (!selectedReturnId) return;
+// $('.confirm-return-to-record').on('click', function () {
+//     if (!selectedReturnId) return;
 
-    const $btn = $(this);
-    $btn.prop('disabled', true).text('Returning...');
+//     const $btn = $(this);
+//     $btn.prop('disabled', true).text('Returning...');
 
-    $.ajax({
-        url: "{{ route('property.scanning.returnToRecord') }}",
-        method: 'POST',
-        data: {
-            _token: '{{ csrf_token() }}',
-            id: selectedReturnId
-        },
-        success: function (response) {
-            $('#returnToRecordModal').modal('hide');
-            selectedReturnId = null;
-            $btn.prop('disabled', false).text('Yes');
+//     $.ajax({
+//         url: "{{ route('property.scanning.returnToRecord') }}",
+//         method: 'POST',
+//         data: {
+//             _token: '{{ csrf_token() }}',
+//             id: selectedReturnId
+//         },
+//         success: function (response) {
+//             $('#returnToRecordModal').modal('hide');
+//             selectedReturnId = null;
+//             $btn.prop('disabled', false).text('Yes');
 
-            if (response.status === 'success') {
-                showSuccess(response.message);
-                $('#scannedRequestsTable').DataTable().ajax.reload(null, false);
-            } else {
-                showError(response.message || 'Something went wrong.');
-            }
-        },
-        error: function (xhr) {
-            $('#returnToRecordModal').modal('hide');
-            selectedReturnId = null;
-            $btn.prop('disabled', false).text('Yes');
+//             if (response.status === 'success') {
+//                 showSuccess(response.message);
+//                 $('#scannedRequestsTable').DataTable().ajax.reload(null, false);
+//             } else {
+//                 showError(response.message || 'Something went wrong.');
+//             }
+//         },
+//         error: function (xhr) {
+//             $('#returnToRecordModal').modal('hide');
+//             selectedReturnId = null;
+//             $btn.prop('disabled', false).text('Yes');
 
-            const errorMsg = xhr.responseJSON?.message || 'Something went wrong.';
-            showError(errorMsg);
-        }
-    });
-});
+//             const errorMsg = xhr.responseJSON?.message || 'Something went wrong.';
+//             showError(errorMsg);
+//         }
+//     });
+// });
 
     let selectedDeleteId = null;
 

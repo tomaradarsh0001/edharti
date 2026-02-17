@@ -17,6 +17,7 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use App\Models\Flat;
 use App\Models\Section;
+use Illuminate\Support\Facades\Auth;
 
 
 class CommonController extends Controller
@@ -176,7 +177,7 @@ class CommonController extends Controller
                 if ($children->count() == 0) {
                     return ['status' => 'error', 'message' => 'Can not Process this property. Please check property details'];
                 } else {
-                    $propertyData = [];
+                    /* $propertyData = [];
                     foreach ($children as $child) {
                         $propertyData[] = $this->preparePropertyDetails(
                             $child->master,
@@ -184,7 +185,25 @@ class CommonController extends Controller
                             $child->id,
                             $propertyMasterId
                         );
+                    } */
+                    $userIsItCell = Auth::user()->hasRole('it-cell');
+                    $propertyData = [];
+
+                    foreach ($children as $child) {
+                        $details = $this->preparePropertyDetails(
+                            $child->master,
+                            true,
+                            $child->id,
+                            $propertyMasterId
+                        );
+
+                        if ($userIsItCell) {
+                            $propertyData = $details; // Overwrite for it-cell
+                        } else {
+                            $propertyData[] = $details; // Append for others
+                        }
                     }
+
                 }
             } else {
                 $propertyData = $this->preparePropertyDetails($property, false, null, $propertyMasterId);

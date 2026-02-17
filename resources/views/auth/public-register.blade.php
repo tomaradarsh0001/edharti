@@ -584,8 +584,7 @@
                                                 </div>
                                                 <div class="col-lg-4 col-12">
                                                     <div class="form-group form-box">
-                                                        <label for="blocknoInvFill" class="quesLabel">Block No.<span
-                                                                class="text-danger">*</span></label>
+                                                        <label for="blocknoInvFill" class="quesLabel">Block No.</label>
                                                         <input type="text" name="blocknoInvFill" id="blocknoInvFill"
                                                             class="form-control alphaNum-hiphenForwardSlash"
                                                             placeholder="Block No." maxlength="6">
@@ -661,7 +660,7 @@
                                                 <div class="col-lg-4 col-12 isPropertyDetailsNotFoundChecked"
                                                     style="display: none;" id="isPropertyDetailsNotFoundChecked">
                                                     <div class="form-group form-box">
-                                                        <label for="flat_no" class="quesLabel">Flat Number<span class="text-danger">*</span></label>
+                                                        <label for="flat_no" class="quesLabel">Flat Number</label>
                                                         <input type="text" class="form-control alphaNumHypSlashParenthspace"
                                                             name="propertyId_flat_no" id="flat_no_after_Checked_Address_notfound"
                                                             placeholder="Enter Flat Number" maxlength="15">

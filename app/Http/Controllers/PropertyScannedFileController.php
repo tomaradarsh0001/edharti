@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use App\Helpers\GeneralFunctions;
+use App\Models\PropertyScannedRequest;
+
 class PropertyScannedFileController extends Controller
 {
     // public function create()
@@ -132,36 +134,54 @@ class PropertyScannedFileController extends Controller
             'documents.*'        => 'required|file|mimes:pdf|max:20480', // 20MB each
         ]);
 
-        $propertyId = $request->input('property_id');
-        $colonyName = $request->input('present_colony_name');
-        $safeColony = Str::slug($colonyName ?? '', '_') ?: 'unknown_colony';
+        return DB::transaction(function () use ($request) {
 
-        foreach ($request->file('documents') as $file) {
-            // Use the original filename (without extension) as old_property_file_name
-            $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $propertyId = $request->input('property_id'); // old_property_id
+            $colonyName = $request->input('present_colony_name');
+            $safeColony = Str::slug($colonyName ?? '', '_') ?: 'unknown_colony';
 
-            // sanitize (avoid slashes, special chars)
-            $oldFileName = Str::slug($originalName, '_') ?: ('FILE_' . time());
+            foreach ($request->file('documents') as $file) {
+                $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+                $oldFileName  = Str::slug($originalName, '_') ?: ('FILE_' . time());
+                $ext          = $file->getClientOriginalExtension() ?: 'pdf';
 
-            $ext = $file->getClientOriginalExtension() ?: 'pdf';
+                $newFilePath = "documents/{$safeColony}/{$propertyId}/scannedFiles/{$oldFileName}.{$ext}";
+                Storage::disk('public')->put($newFilePath, file_get_contents($file->getRealPath()));
 
-            $newFilePath = "documents/{$safeColony}/{$propertyId}/scannedFiles/{$oldFileName}.{$ext}";
+                PropertyScannedFile::create([
+                    'property_master_id'         => $request->input('property_master_id'),
+                    'splited_property_detail_id' => $request->input('splited_property_detail_id') ?: null,
+                    'flat_id'                    => $request->input('flat_id') ?: null,
+                    'colony_name'                => $colonyName,
+                    'old_property_id'            => $propertyId,
+                    'old_property_file_name'     => $oldFileName,
+                    'document_path'              => $newFilePath,
+                ]);
+            }
 
-            Storage::disk('public')->put($newFilePath, file_get_contents($file->getRealPath()));
+            // ✅ Close scanning request ONLY if it exists and is not already closed
+            $closedItemId = DB::table('items')->where('item_code', 'SCAN_CLOSED')->value('id');
+            $requestClosed = false;
 
-            PropertyScannedFile::create([
-                'property_master_id'         => $request->input('property_master_id'),
-                'splited_property_detail_id' => $request->input('splited_property_detail_id') ?: null,
-                'flat_id'                    => $request->input('flat_id') ?: null,
-                'colony_name'                => $colonyName,
-                'old_property_id'            => $propertyId,
-                'old_property_file_name'     => $oldFileName,
-                'document_path'              => $newFilePath,
-            ]);
-        }
+            if ($closedItemId) {
+                $openRequests = PropertyScannedRequest::where('old_property_id', $propertyId)
+                    ->where('status', '!=', $closedItemId);
 
-        return redirect()->route('property.scanning.create')
-            ->with('success', 'All scanned documents saved successfully.');
+                if ($openRequests->exists()) {
+                    $openRequests->update([
+                        'status'     => $closedItemId,
+                        'updated_at' => now(),
+                    ]);
+                    $requestClosed = true;
+                }
+            }
+
+            $msg = $requestClosed
+                ? 'All scanned documents saved successfully. Request closed.'
+                : 'All scanned documents saved successfully.';
+
+            return redirect()->route('property.scanning.create')->with('success', $msg);
+        });
     }
 
 

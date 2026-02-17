@@ -696,6 +696,7 @@ class ApplicationController extends Controller
     {
         // $propertyMaster = PropertyMaster::where('old_propert_id', $propertyId)->latest('created_at')->first();
         $splitedProperty = SplitedPropertyDetail::where('old_property_id', $propertyId)->first();
+        // dd($splitedProperty,$propertyId);
         if (!empty($splitedProperty)) {
             $propertyId = $splitedProperty->property_master_id;
             $propertyMaster = PropertyMaster::find($propertyId);
@@ -709,7 +710,7 @@ class ApplicationController extends Controller
         $propertyLeaseDetail = $propertyMaster->propertyLeaseDetail;
         $data['leaseType'] = getServiceNameById($propertyLeaseDetail->type_of_lease);
         // $data['status'] = $propertyMaster->statusName; // added by Nitin because we need to show property status in application view page
-        $data['status'] = $splitedProperty?->property_status ?? $propertyMaster->statusName; // added by Nitin because we need to show property status in application view page
+        $data['status'] = getServiceNameById($splitedProperty?->property_status) ?? $propertyMaster->statusName; // added by Nitin because we need to show property status in application view page
         $data['leaseExectionDate'] = $propertyLeaseDetail->doe;
         // $data['area'] = $propertyLeaseDetail->plot_area_in_sqm;
         // $data['presentlyKnownAs'] = $propertyLeaseDetail->presently_known_as;

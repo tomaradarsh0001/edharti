@@ -116,6 +116,23 @@ class PaymentController extends Controller
                 $view =  view('include.parts.property-details', ['property' => $property, 'countries' => $countries, 'states' => $states,'paymentType' => $paymentType])->render();
                 return response()->json(['status' => true, 'html' => $view]);
                 break;
+                case 'PAY_TEMP_ALLOT':
+            case 'PAY_LAND_ALLOT':
+                //dd($inputName);
+            if ($inputName != "reason/_purpose") {
+                    return response()->json(['status' => false, 'details' => 'Please fill details.']);
+                }
+                $property = '1';
+	//                $property = PropertyMaster::where('old_propert_id', $propertyId)->first();
+	//                if (empty($property)) {
+	//                    return response()->json(['status' => false, 'details' => 'Property ID does not exist']);
+	//                }
+            $countries = Country::all();
+            $states = DB::table('states')->where('country_id', 101)->get();
+            $view =  view('include.parts.property-details', ['property' => $property, 'countries' => $countries, 'states' => $states,'paymentType' => $paymentType])->render();
+                return response()->json(['status' => true, 'html' => $view]);
+                break;
+
 
             default:
                 return response()->json(['status' => false, 'details' => 'Invalid payment type']);
@@ -897,7 +914,10 @@ public function paymentStatusDisplay(Request $data)
 					    )
 					    ->whereIn('type', [
 					        getStatusName('GROUND_RENT'),
-					        getStatusName('PAY_APP_CHG')
+					        getStatusName('PAY_APP_CHG'),
+                             getStatusName('PAY_RENT_SUB'),
+                             getStatusName('PAY_TEMP_ALLOT'),
+                             getStatusName('PAY_LAND_ALLOT')
 					    ])
 					    ->where('status', getStatusName('PAY_SUCCESS'))
 					    ->when($startDate, function ($q) use ($startDate) {
@@ -1364,23 +1384,35 @@ public function checkUpdatedPaymentStatus($paymentId)
         } elseif($request->payment_type == 'PAY_RTI'){
             $paymentIdPrefix = 'RTI';
         }
+        elseif($request->payment_type == 'PAY_TEMP_ALLOT'){
+            $paymentIdPrefix = 'TMALT';
+            $propertyMasterId = 1;
+            $master_old_property_id = 11;
+        }
+         elseif($request->payment_type == 'PAY_LAND_ALLOT'){
+            $paymentIdPrefix = 'LDALT';
+            $propertyMasterId = 1;
+            $master_old_property_id = 11;
+        }
+
         elseif($request->payment_type == 'PAY_RENT_SUB'){
             $paymentIdPrefix = 'SUBL';
         }
         $paidAmount = $request->paid_amount;
         $uniquePayemntId = $paymentIdPrefix . date('YmdHis');
-        $payment = Payment::create([
+       $payment = Payment::create([
             'property_master_id' => $propertyMasterId,
             'type' => getServiceType($request->payment_type),
             'payment_mode' => getServiceType($request->payment_mode),
             'unique_payment_id' => $uniquePayemntId,
-            'splited_property_detail_id' => $isSplitedproperty ? $isSplitedproperty->id : null,
-            'master_old_property_id' => $master_old_property_id,
-            'splited_old_property_id' => $splited_old_property_id,
+            'splited_property_detail_id' => isset($isSplitedproperty) ? $isSplitedproperty->id : null,
+            'master_old_property_id' => $master_old_property_id ,
+            'splited_old_property_id' => $splited_old_property_id ?? null,
             'amount' => $paidAmount,
             'status' => 1,
             'created_by' => Auth::check() ? Auth::id() : null
         ]);
+
 
         if ($payment) {
 

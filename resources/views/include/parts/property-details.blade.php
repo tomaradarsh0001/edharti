@@ -1,3 +1,4 @@
+@if(!in_array($paymentType, ['PAY_TEMP_ALLOT', 'PAY_LAND_ALLOT']))
 <div class="row">
     <div class="col-lg-12">
         <table class="table table-bordered table-striped">
@@ -13,12 +14,14 @@
         </table>
     </div>
 </div>
+@endif
 <form method="post" id="paymentDetailForm" action="{{route('applicant.applicantPayment')}}">
     @csrf
     <div class="col-lg-12">
         <h5 class="mt-2 mb-2">Fill payment details</h5>
     </div>
-    <input type="hidden" name="property_id" value="{{$property->old_propert_id}}">
+   
+    <input type="hidden" name="property_id" value="{{$property->old_propert_id ?? null}}"> 
     <input type="hidden" name="payment_type" value="{{$paymentType}}">
     <div class="row">
         <div class="col-lg-4">

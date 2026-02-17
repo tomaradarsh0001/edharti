@@ -1069,7 +1069,10 @@ if (!function_exists('getRevenueDetails')) {
                         )
                         ->whereIn('type', [
                             getStatusName('GROUND_RENT'),
-                            getStatusName('PAY_APP_CHG')
+                            getStatusName('PAY_APP_CHG'),
+                            getStatusName('PAY_RENT_SUB'),
+                            getStatusName('PAY_TEMP_ALLOT'),
+                            getStatusName('PAY_LAND_ALLOT')
                         ])
                         ->where('status', getStatusName('PAY_SUCCESS'))
                         ->when($startDate, function ($q) use ($startDate) {
