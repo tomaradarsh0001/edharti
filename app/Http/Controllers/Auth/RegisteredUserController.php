@@ -600,7 +600,8 @@ class RegisteredUserController extends Controller
                 // $isMobileAvailable = Otp::where([['country_code', $request->countryCode], ['mobile', $request->mobile], ['is_mobile_verified', '1']])->first();
 
                 if ($isMobileAvailable) {
-                    $generateOtp = GeneralFunctions::generateUniqueRandomNumber(4);
+                    // $generateOtp = GeneralFunctions::generateUniqueRandomNumber(4);
+                    $generateOtp = env('OTP_TEST_MODE') ? '1234' : GeneralFunctions::generateUniqueRandomNumber(4);
 
                     if (isset($request->emailToVerify)) {
                         $isEmailVerified = Otp::where('email', $request->emailToVerify)->first();
@@ -643,8 +644,22 @@ class RegisteredUserController extends Controller
                             'otp' => $generateOtp
                         ];
                         Log::info("your otp is " . $generateOtp);
-                        $communicationService->sendSmsMessage($data, $request->mobile, $action, $request->countryCode);
-                        $communicationService->sendWhatsAppMessage($data, $request->mobile, $action, $request->countryCode);
+                          if (env('OTP_TEST_MODE')) {
+
+        Log::info("TEST MODE OTP for mobile: 1234");
+
+        return response()->json([
+            'success' => true,
+            'message' => 'OTP sent successfully (Test Mode)',
+            'otp' => '1234' // optional for frontend
+        ]);
+    }
+
+    // PRODUCTION MODE
+    $communicationService->sendSmsMessage($data, $request->mobile, $action, $request->countryCode);
+    $communicationService->sendWhatsAppMessage($data, $request->mobile, $action, $request->countryCode);
+                        // $communicationService->sendSmsMessage($data, $request->mobile, $action, $request->countryCode);
+                        // $communicationService->sendWhatsAppMessage($data, $request->mobile, $action, $request->countryCode);
                         return response()->json(['success' => true, 'message' => 'OTP sent to mobile number ' . $request->mobile . ' successfully']);
                     } else {
                         return response()->json(['success' => false, 'message' => 'Failed to send OTP']);

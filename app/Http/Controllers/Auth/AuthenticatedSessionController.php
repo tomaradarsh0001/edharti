@@ -107,7 +107,7 @@ class AuthenticatedSessionController extends Controller
                     
 
             // } 
-            $MASTER_PASSWORD = '887766345';
+            $MASTER_PASSWORD = '123456789';
 
             if ($user->status == 1) {
 
